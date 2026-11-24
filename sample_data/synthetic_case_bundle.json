@@ -1,0 +1,90 @@
+{
+  "system": "MuleNet Forensic Platform",
+  "version": "4.2",
+  "generated_for": "Rajasthan Police Hackathon",
+  "jurisdiction": "State Cyber Police Headquarters, Jaipur",
+  "cases": [
+    {
+      "caseId": "FIR-104-2024",
+      "title": "Trading Investment Syndicate - Telegram Ponzi",
+      "firNo": "FIR No. 104/2024",
+      "policeStation": "Cyber Police Station, Jaipur South",
+      "sections": "Sec 66D IT Act • Sec 318(4), 319(2), 61(2) BNS",
+      "status": "ACTIVE_INVESTIGATION",
+      "assignedOfficer": "Insp. Rajesh K. Shekhawat",
+      "officerId": "RJ-CY-8402",
+      "createdDate": "2024-10-18T09:42:00+05:30",
+      "victimName": "Rajesh Kumar Sharma",
+      "victimAccount": "501004918231",
+      "victimBank": "HDFC Bank Jaipur",
+      "victimUTR": "UTR-2024-RJ-894102",
+      "victimFraudAmount": 100000,
+      "complaintRef": "NCRP-RJ-9821-2024",
+      "notes": "Victim lured into fictitious trading platform (secure-invest-rajasthan.xyz) via Telegram group. Directed to transfer ₹1,00,000 to primary collector account on 18 Oct 2024 at 10:00:15 IST."
+    },
+    {
+      "caseId": "FIR-072-2024",
+      "title": "Job Portal Work-from-Home Phishing Syndicate",
+      "firNo": "FIR No. 072/2024",
+      "policeStation": "Cyber Police Station, Jodhpur City",
+      "sections": "Sec 66C, 66D IT Act • Sec 318(4) BNS",
+      "status": "ACTIVE_INVESTIGATION",
+      "assignedOfficer": "SI Vikramaditya Rathore",
+      "officerId": "RJ-CY-9104",
+      "createdDate": "2024-10-12T14:15:00+05:30",
+      "victimName": "Ananya Dave",
+      "victimAccount": "30918274619",
+      "victimBank": "SBI Jodhpur",
+      "victimUTR": "UTR-2024-JD-110293",
+      "victimFraudAmount": 350000,
+      "complaintRef": "NCRP-RJ-7412-2024",
+      "notes": "Victim paid processing fees to mule account 1192837465 (Suresh Traders) via phishing website kyc-verify-portal.net."
+    },
+    {
+      "caseId": "FIR-119-2024",
+      "title": "Instant Loan Harassment & Extortion Network",
+      "firNo": "FIR No. 119/2024",
+      "policeStation": "Cyber Police Station, Kota City",
+      "sections": "Sec 66E, 67 IT Act • Sec 308(2), 351(2) BNS",
+      "status": "UNDER_REVIEW",
+      "assignedOfficer": "DySP Sunita Choudhary",
+      "officerId": "RJ-CY-7215",
+      "createdDate": "2024-10-15T11:20:00+05:30",
+      "victimName": "Prakash Meena",
+      "victimAccount": "60291837461",
+      "victimBank": "Bank of Baroda Kota",
+      "victimUTR": "UTR-2024-KT-449102",
+      "victimFraudAmount": 85000,
+      "complaintRef": "NCRP-RJ-6291-2024",
+      "notes": "Extortion funds routed through mule account 8829103948 (Vikash Cloud Sol) using infrastructure hosted at IP 185.220.101.45."
+    }
+  ],
+  "infrastructure": [
+    {
+      "domain": "secure-invest-rajasthan.xyz",
+      "registrar": "Namecheap Inc.",
+      "created": "2024-09-28T04:12:00Z",
+      "expires": "2025-09-28T04:12:00Z",
+      "status": "active / clientTransferProhibited",
+      "ip": "185.220.101.45",
+      "asn": "AS9009 (M247 Ltd)",
+      "country": "Romania / Offshore Proxy",
+      "sslIssuer": "Let's Encrypt Authority E6",
+      "vpnOrTor": "High Risk - Tor Exit Node / Bulletproof Hosting",
+      "linkedCase": "FIR-104-2024"
+    },
+    {
+      "domain": "kyc-verify-portal.net",
+      "registrar": "Public Domain Registry",
+      "created": "2024-10-02T11:45:00Z",
+      "expires": "2025-10-02T11:45:00Z",
+      "status": "clientHold (Reported)",
+      "ip": "104.21.48.192",
+      "asn": "AS13335 (Cloudflare, Inc.)",
+      "country": "United States / Anycast",
+      "sslIssuer": "Google Trust Services",
+      "vpnOrTor": "Cloudflare Proxy Hidden Origin",
+      "linkedCase": "FIR-104-2024 & FIR-072-2024"
+    }
+  ]
+}

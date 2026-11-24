@@ -1,0 +1,4 @@
+Date,Time,Transaction_ID,UTR,Narration,Direction,Debit,Credit,Balance,Counterparty_Account,Counterparty_Name
+2024-10-18,10:32:40,TXN-ICI-101,UTR-2024-KOT-9021,RTGS Inflow from Ashok Verma,CREDIT,0.00,70000.00,75000.00,9182736450,Ashok Verma
+2024-10-18,11:45:10,TXN-ICI-102,UTR-2024-ICI-5541,IMPS Layering to Suresh Traders,DEBIT,50000.00,0.00,25000.00,1192837465,Suresh Traders
+2024-10-18,12:15:30,TXN-ICI-103,UTR-2024-ICI-5542,UPI Transfer to Vikash Cloud,DEBIT,15000.00,0.00,10000.00,8829103948,Vikash Cloud Sol
