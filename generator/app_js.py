@@ -84,7 +84,7 @@ function navigateTo(viewId) {
   // Remove active styling on sidebar items
   document.querySelectorAll('.nav-item').forEach(function(el) {
     el.classList.remove('active', 'bg-secondary', 'text-white', 'font-semibold');
-    el.classList.add('text-surface-container-high');
+    el.classList.add('text-slate-300');
   });
 
   // Show selected view
@@ -97,7 +97,7 @@ function navigateTo(viewId) {
   const targetNav = document.getElementById('nav-' + viewId);
   if (targetNav) {
     targetNav.classList.add('active', 'bg-secondary', 'text-white', 'font-semibold');
-    targetNav.classList.remove('text-surface-container-high');
+    targetNav.classList.remove('text-slate-300');
   }
 
   // Trigger resize on graphs if navigating to them

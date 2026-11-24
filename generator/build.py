@@ -106,6 +106,20 @@ def build_index_html():
       0%, 100% {{ transform: translateY(0); }}
       50% {{ transform: translateY(-4px); }}
     }}
+    /* Fixed high-contrast hover states for dark sidebar */
+    .nav-item {{
+      color: #CBD5E1 !important;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }}
+    .nav-item:hover {{
+      background-color: #1E293B !important;
+      color: #FFFFFF !important;
+    }}
+    .nav-item.active {{
+      background-color: #1D4ED8 !important;
+      color: #FFFFFF !important;
+      font-weight: 600 !important;
+    }}
   </style>
 </head>
 <body class="bg-surface text-on-surface antialiased text-[13px]">

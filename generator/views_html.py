@@ -88,11 +88,11 @@ SIDEBAR_HTML = """
     <!-- Operations Group -->
     <div class="px-4 mb-1 font-label-caps text-[10px] text-outline-variant uppercase tracking-wider">Command & Operations</div>
     <nav class="space-y-0.5 px-2 mb-3">
-      <a href="javascript:void(0)" onclick="navigateTo('investigation-dashboard')" id="nav-investigation-dashboard" class="nav-item active flex items-center gap-2.5 px-3 py-1.5 rounded transition-colors text-surface-container-high hover:bg-surface-variant hover:text-on-surface font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('investigation-dashboard')" id="nav-investigation-dashboard" class="nav-item active flex items-center gap-2.5 px-3 py-1.5 rounded transition-colors text-slate-300 hover:bg-slate-800 hover:text-white font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">dashboard</span>
         <span>Investigation Overview</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('cases')" id="nav-cases" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('cases')" id="nav-cases" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">folder_shared</span>
         <span>Case Management</span>
       </a>
@@ -101,24 +101,24 @@ SIDEBAR_HTML = """
     <!-- Financial Forensics Group -->
     <div class="px-4 mb-1 font-label-caps text-[10px] text-outline-variant uppercase tracking-wider">Financial Forensics</div>
     <nav class="space-y-0.5 px-2 mb-3">
-      <a href="javascript:void(0)" onclick="navigateTo('bank-statement-ingestion')" id="nav-bank-statement-ingestion" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('bank-statement-ingestion')" id="nav-bank-statement-ingestion" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">upload_file</span>
         <span>Bank Statement Ingestion</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('transaction-explorer')" id="nav-transaction-explorer" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('transaction-explorer')" id="nav-transaction-explorer" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">receipt_long</span>
         <span>Transaction Explorer</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('mule-account-detection')" id="nav-mule-account-detection" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('mule-account-detection')" id="nav-mule-account-detection" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">account_tree</span>
         <span>Mule Account Detection</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('money-trail-analysis')" id="nav-money-trail-analysis" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('money-trail-analysis')" id="nav-money-trail-analysis" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px] text-amber-400">hub</span>
         <span class="font-semibold text-white">Money Trail Analysis</span>
         <span class="ml-auto px-1 py-0.2 bg-amber-500/20 text-amber-400 text-[9px] font-bold rounded">HERO</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('freeze-priority-engine')" id="nav-freeze-priority-engine" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('freeze-priority-engine')" id="nav-freeze-priority-engine" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">lock_clock</span>
         <span>Freeze-Priority Engine</span>
       </a>
@@ -127,15 +127,15 @@ SIDEBAR_HTML = """
     <!-- Cyber & Infrastructure Group -->
     <div class="px-4 mb-1 font-label-caps text-[10px] text-outline-variant uppercase tracking-wider">Cyber & Infrastructure</div>
     <nav class="space-y-0.5 px-2 mb-3">
-      <a href="javascript:void(0)" onclick="navigateTo('domain-and-ip-intelligence')" id="nav-domain-and-ip-intelligence" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('domain-and-ip-intelligence')" id="nav-domain-and-ip-intelligence" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">dns</span>
         <span>Domain & IP Intelligence</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('relationship-graph')" id="nav-relationship-graph" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('relationship-graph')" id="nav-relationship-graph" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">bubble_chart</span>
         <span>Relationship Graph</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('cross-case-linking')" id="nav-cross-case-linking" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('cross-case-linking')" id="nav-cross-case-linking" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">share</span>
         <span>Cross-Case Intelligence</span>
       </a>
@@ -144,23 +144,23 @@ SIDEBAR_HTML = """
     <!-- Evidence & Compliance Group -->
     <div class="px-4 mb-1 font-label-caps text-[10px] text-outline-variant uppercase tracking-wider">Evidence & Legal Compliance</div>
     <nav class="space-y-0.5 px-2 mb-3">
-      <a href="javascript:void(0)" onclick="navigateTo('investigation-timeline')" id="nav-investigation-timeline" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('investigation-timeline')" id="nav-investigation-timeline" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">timeline</span>
         <span>Investigation Timeline</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('reports-and-evidence')" id="nav-reports-and-evidence" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('reports-and-evidence')" id="nav-reports-and-evidence" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">gavel</span>
         <span>Reports & Evidence</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('lawful-requests')" id="nav-lawful-requests" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('lawful-requests')" id="nav-lawful-requests" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">assignment_late</span>
         <span>Sec 91 CrPC Requests</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('audit-log')" id="nav-audit-log" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('audit-log')" id="nav-audit-log" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">history</span>
         <span>Audit Log</span>
       </a>
-      <a href="javascript:void(0)" onclick="navigateTo('settings')" id="nav-settings" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-surface-container-high hover:bg-surface-variant hover:text-on-surface transition-colors font-body-sm text-[13px]">
+      <a href="javascript:void(0)" onclick="navigateTo('settings')" id="nav-settings" class="nav-item flex items-center gap-2.5 px-3 py-1.5 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors font-body-sm text-[13px]">
         <span class="material-symbols-outlined text-[18px]">settings</span>
         <span>Settings & Help</span>
       </a>
