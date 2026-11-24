@@ -80,14 +80,21 @@ VIEW_INGESTION = """
           </div>
         </div>
 
-        <!-- Controls: Decryption Password & Normalisation Trigger -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pt-3 border-t border-outline-variant">
+        <!-- Controls: Target Account, Decryption Password & Normalisation Trigger -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 pt-3 border-t border-outline-variant">
+          <div>
+            <label class="font-label-caps text-[10px] text-on-surface flex items-center gap-1 mb-1" for="ingestionTargetAccountInput">
+              <span class="material-symbols-outlined text-[13px] text-on-surface-variant">account_balance</span>
+              <span>STATEMENT ACCOUNT NO. (IF NOT IN COLUMNS)</span>
+            </label>
+            <input class="w-full h-8 px-2.5 bg-surface-container-low border border-outline-variant rounded font-label-code-sm text-[11px] text-on-surface focus:outline-none focus:border-secondary" id="ingestionTargetAccountInput" placeholder="e.g. 9182736450 (Optional)" type="text"/>
+          </div>
           <div>
             <label class="font-label-caps text-[10px] text-on-surface flex items-center gap-1 mb-1" for="pdfPasswordInput">
               <span class="material-symbols-outlined text-[13px] text-on-surface-variant">lock</span>
-              <span>STATEMENT PASSWORD / DECRYPTION KEY (IF ENCRYPTED)</span>
+              <span>STATEMENT PASSWORD (IF ENCRYPTED)</span>
             </label>
-            <input class="w-full h-8 px-2.5 bg-surface-container-low border border-outline-variant rounded font-label-code-sm text-[11px] text-on-surface focus:outline-none focus:border-secondary" id="pdfPasswordInput" placeholder="e.g. PAN + DOB (HDFC/SBI standard format)" type="password" value="PANJAIPUR9088"/>
+            <input class="w-full h-8 px-2.5 bg-surface-container-low border border-outline-variant rounded font-label-code-sm text-[11px] text-on-surface focus:outline-none focus:border-secondary" id="pdfPasswordInput" placeholder="e.g. PAN + DOB" type="password" value=""/>
           </div>
           <div class="flex flex-col justify-end">
             <button onclick="processIngestionBatch()" class="w-full h-8 bg-primary hover:bg-slate-800 text-white rounded font-label-caps text-[11px] tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-sm">
@@ -96,6 +103,7 @@ VIEW_INGESTION = """
             </button>
           </div>
         </div>
+        <div id="ingestionDiagnosticsContainer" class="hidden mt-3 p-2.5 bg-amber-50 border border-amber-300 rounded text-[11px] font-mono text-amber-950 space-y-1"></div>
       </div>
     </div>
 

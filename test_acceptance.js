@@ -1,12 +1,14 @@
 const fs = require('fs');
 const html = fs.readFileSync('index.html', 'utf8');
-const inlineScripts = html.match(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi);
+const inlineScripts = html.match(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi) || [];
 console.log('Inline scripts found:', inlineScripts.length);
-// inline script 1 is tailwind config
-// inline script 2 is SEED_DATA
-// inline script 3 is application logic
-const seedDataScript = inlineScripts[1].replace(/<\/?script[^>]*>/gi, '');
-const mainScript = inlineScripts[2].replace(/<\/?script[^>]*>/gi, '');
+const seedTag = inlineScripts.find(s => s.includes('const SEED_DATA ='));
+const mainTag = inlineScripts.find(s => s.includes('let MuleNetState ='));
+if (!seedTag || !mainTag) {
+  throw new Error('Could not locate SEED_DATA or MuleNetState inline scripts in index.html');
+}
+const seedDataScript = seedTag.replace(/<\/?script[^>]*>/gi, '');
+const mainScript = mainTag.replace(/<\/?script[^>]*>/gi, '');
 
 const elements = {};
 function getEl(id) {

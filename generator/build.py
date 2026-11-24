@@ -16,8 +16,22 @@ from views_part3 import (
 )
 from app_js import APP_JS
 
+def read_vendor_js(filename):
+    vendor_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor", filename)
+    with open(vendor_path, "r", encoding="utf-8") as vf:
+        # Prevent premature </script> termination inside inline <script> tags
+        return vf.read().replace("</script>", "<\\/script>").replace("</SCRIPT>", "<\\/SCRIPT>")
+
 def build_index_html():
     print("Assembling index.html for MuleNet...")
+
+    tailwind_js = read_vendor_js("tailwindcss.js")
+    cytoscape_js = read_vendor_js("cytoscape.min.js")
+    xlsx_js = read_vendor_js("xlsx.full.min.js")
+    jspdf_js = read_vendor_js("jspdf.umd.min.js")
+    autotable_js = read_vendor_js("jspdf.plugin.autotable.min.js")
+    pdf_js = read_vendor_js("pdf.min.js")
+    pdf_worker_js = read_vendor_js("pdf.worker.min.js")
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -26,18 +40,35 @@ def build_index_html():
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>MULENET — Financial Crime Intelligence & Money-Trail Analysis Platform</title>
 
-  <!-- Google Fonts & Material Symbols -->
+  <!-- Optional Online Fonts (Graceful offline fallback to system fonts) -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
 
-  <!-- CDN Libraries for Network Graph, Excel Parsing/Export, PDF Generation -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <!-- Embedded Offline-Bundled Libraries (Tailwind, Cytoscape, SheetJS, jsPDF, AutoTable, PDF.js) -->
+  <script>{tailwind_js}</script>
+  <script>{cytoscape_js}</script>
+  <script>{xlsx_js}</script>
+  <script>{jspdf_js}</script>
+  <script>{autotable_js}</script>
+  <script>{pdf_js}</script>
+  <script id="pdfjs-worker-bundle" type="javascript/worker">{pdf_worker_js}</script>
+  <script>
+    (function() {{
+      if (typeof pdfjsLib !== 'undefined') {{
+        var workerEl = document.getElementById('pdfjs-worker-bundle');
+        if (workerEl) {{
+          try {{
+            var blob = new Blob([workerEl.textContent], {{ type: 'application/javascript' }});
+            pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+          }} catch (e) {{
+            console.warn('PDF.js Blob worker setup fallback:', e);
+          }}
+        }}
+      }}
+    }})();
+  </script>
 
   <!-- Tailwind Forensic Theme Configuration -->
   <script>

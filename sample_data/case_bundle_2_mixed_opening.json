@@ -1,0 +1,67 @@
+{
+  "caseMetadata": {
+    "caseId": "FIR-SYN-MIXED-02",
+    "title": "Mixed Opening Balance Synthetic Dataset",
+    "victimAmount": 120000,
+    "victimUTR": "UTR-SYN-MIX-200"
+  },
+  "transactions": [
+    {
+      "id": "SYN-M1",
+      "date": "2024-11-12",
+      "time": "09:00:00",
+      "timestamp": "2024-11-12T09:00:00+05:30",
+      "bank": "PNB",
+      "account": "MIX_ACC_1",
+      "holder": "Mixed Balance Node",
+      "direction": "CREDIT",
+      "debit": 0,
+      "credit": 30000,
+      "amount": 30000,
+      "balance": 30000,
+      "counterpartyAccount": "LEGIT_EMPLOYER",
+      "counterpartyName": "Unrelated Salary Credit",
+      "utr": "UTR-SYN-MIX-PRE",
+      "narration": "Legitimate Pre-Existing Balance",
+      "flag": "INGESTED_CREDIT"
+    },
+    {
+      "id": "SYN-M2",
+      "date": "2024-11-12",
+      "time": "11:00:00",
+      "timestamp": "2024-11-12T11:00:00+05:30",
+      "bank": "PNB",
+      "account": "MIX_ACC_1",
+      "holder": "Mixed Balance Node",
+      "direction": "CREDIT",
+      "debit": 0,
+      "credit": 120000,
+      "amount": 120000,
+      "balance": 150000,
+      "counterpartyAccount": "VICTIM_SYN_2",
+      "counterpartyName": "Victim Synthetic 2",
+      "utr": "UTR-SYN-MIX-200",
+      "narration": "Fraudulent Victim Deposit",
+      "flag": "VICTIM_PRIMARY_INFLOW"
+    },
+    {
+      "id": "SYN-M3",
+      "date": "2024-11-12",
+      "time": "11:30:00",
+      "timestamp": "2024-11-12T11:30:00+05:30",
+      "bank": "PNB",
+      "account": "MIX_ACC_1",
+      "holder": "Mixed Balance Node",
+      "direction": "DEBIT",
+      "debit": 80000,
+      "credit": 0,
+      "amount": 80000,
+      "balance": 70000,
+      "counterpartyAccount": "MIX_ACC_2",
+      "counterpartyName": "Downstream Sink 2",
+      "utr": "UTR-SYN-MIX-201",
+      "narration": "RTGS Outflow",
+      "flag": "INGESTED_DEBIT"
+    }
+  ]
+}

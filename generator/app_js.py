@@ -92,10 +92,95 @@ function sha256PureJS(ascii) {
   return result;
 }
 
+// HTML Escaping & Spreadsheet Formula Injection Sanitization
+function escapeHTML(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeSpreadsheetCell(val) {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'string' && /^[=+\-@\t\r]/.test(val)) {
+    return "'" + val;
+  }
+  return val;
+}
+
+// IndexedDB Binary Blob Store for Real Evidence SHA-256 Re-Verification
+const MuleNetBlobMemoryFallback = new Map();
+const MuleNetEvidenceDB = {
+  dbName: 'MuleNetEvidenceVault',
+  storeName: 'evidence_blobs',
+  _open() {
+    return new Promise((resolve) => {
+      if (typeof indexedDB === 'undefined') return resolve(null);
+      try {
+        const req = indexedDB.open(this.dbName, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(this.storeName)) {
+            db.createObjectStore(this.storeName, { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = () => resolve(null);
+      } catch (err) {
+        resolve(null);
+      }
+    });
+  },
+  async put(id, arrayBuffer) {
+    MuleNetBlobMemoryFallback.set(id, arrayBuffer);
+    const db = await this._open();
+    if (!db) return true;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(this.storeName, 'readwrite');
+        tx.objectStore(this.storeName).put({ id, bytes: arrayBuffer });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  },
+  async get(id) {
+    const db = await this._open();
+    if (db) {
+      const res = await new Promise((resolve) => {
+        try {
+          const tx = db.transaction(this.storeName, 'readonly');
+          const req = tx.objectStore(this.storeName).get(id);
+          req.onsuccess = () => resolve(req.result ? req.result.bytes : null);
+          req.onerror = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+      if (res) return res;
+    }
+    return MuleNetBlobMemoryFallback.get(id) || null;
+  },
+  async clear() {
+    MuleNetBlobMemoryFallback.clear();
+    const db = await this._open();
+    if (!db) return;
+    try {
+      const tx = db.transaction(this.storeName, 'readwrite');
+      tx.objectStore(this.storeName).clear();
+    } catch (e) {}
+  }
+};
+
 // Compute real SHA-256 (async Web Crypto with pure JS fallback)
 async function computeRealSHA256(data) {
   try {
-    if (window.crypto && window.crypto.subtle && (data instanceof ArrayBuffer || ArrayBuffer.isView(data))) {
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle && (data instanceof ArrayBuffer || ArrayBuffer.isView(data))) {
       const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -106,11 +191,12 @@ async function computeRealSHA256(data) {
   let str = "";
   if (typeof data === 'string') {
     str = data;
-  } else if (data instanceof ArrayBuffer) {
+  } else if (ArrayBuffer.isView(data)) {
+    const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+  } else if (data && typeof data.byteLength === 'number') {
     const bytes = new Uint8Array(data);
     for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
-  } else if (ArrayBuffer.isView(data)) {
-    for (let i = 0; i < data.length; i++) str += String.fromCharCode(data[i]);
   }
   return sha256PureJS(str);
 }
@@ -140,11 +226,14 @@ function saveToLocalStorage() {
         size: e.size,
         uploadTime: e.uploadTime,
         sha256: e.sha256,
+        integrityStatus: e.integrityStatus || 'RECORDED',
         caseId: e.caseId,
         status: e.status,
         rows: e.rows,
+        rejectedCount: e.rejectedCount || 0,
         notes: e.notes
       })),
+      crossCaseStates: MuleNetState.crossCaseStates || {},
       settings: MuleNetState.settings,
       auditLogs: MuleNetState.auditLogs.slice(0, 50),
       currentCaseId: MuleNetState.currentCaseId
@@ -165,6 +254,7 @@ function loadInitialData() {
       MuleNetState.transactions = parsed.transactions || JSON.parse(JSON.stringify(SEED_DATA.transactions));
       MuleNetState.infrastructure = parsed.infrastructure || JSON.parse(JSON.stringify(SEED_DATA.infrastructure));
       MuleNetState.evidenceFiles = parsed.evidenceFiles || JSON.parse(JSON.stringify(SEED_DATA.evidenceFiles));
+      MuleNetState.crossCaseStates = parsed.crossCaseStates || {};
       MuleNetState.settings = parsed.settings || JSON.parse(JSON.stringify(SEED_DATA.settings));
       MuleNetState.auditLogs = parsed.auditLogs || [];
       MuleNetState.currentCaseId = parsed.currentCaseId || SEED_DATA.currentCaseId;
@@ -181,6 +271,7 @@ function loadInitialData() {
   MuleNetState.transactions = JSON.parse(JSON.stringify(SEED_DATA.transactions));
   MuleNetState.infrastructure = JSON.parse(JSON.stringify(SEED_DATA.infrastructure));
   MuleNetState.evidenceFiles = JSON.parse(JSON.stringify(SEED_DATA.evidenceFiles));
+  MuleNetState.crossCaseStates = {};
   MuleNetState.settings = JSON.parse(JSON.stringify(SEED_DATA.settings));
   MuleNetState.currentCaseId = SEED_DATA.currentCaseId;
 
@@ -327,8 +418,8 @@ function verifyStatementReconciliation(transactions, declaredOpeningBal = null, 
 // ENGINE 2: MULE ACCOUNT DETECTION ENGINE (Data-Driven, No Static Labels)
 // -------------------------------------------------------------
 function calculateMuleRiskScore(account, allTransactions, settings = null) {
-  const cfg = settings || MuleNetState.settings;
-  const weights = (cfg && cfg.weights) || {
+  const cfg = settings || MuleNetState.settings || {};
+  const weights = cfg.weights || {
     rapidInOut: 20,
     manyToOne: 15,
     roundFigure: 10,
@@ -339,7 +430,13 @@ function calculateMuleRiskScore(account, allTransactions, settings = null) {
     crossCaseMatch: 10
   };
 
-  const accountTxns = allTransactions.filter(t => t.account === account.accountNumber);
+  const activeCaseId = MuleNetState.currentCaseId;
+  // Strict Case Isolation: only evaluate transactions belonging to the active case
+  const accountTxns = allTransactions
+    .filter(t => t.account === account.accountNumber && t.caseId === activeCaseId)
+    .slice()
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
   let triggeredRules = [];
   let score = 0;
 
@@ -355,7 +452,7 @@ function calculateMuleRiskScore(account, allTransactions, settings = null) {
       const diffHours = (dTime - cTime) / (1000 * 3600);
       const cAmt = parseFloat(c.credit || c.amount || 0);
       const dAmt = parseFloat(d.debit || d.amount || 0);
-      if (diffHours >= 0 && diffHours <= (cfg.rapidTransferWindowHours || 2) && dAmt >= (cAmt * 0.70)) {
+      if (diffHours >= 0 && diffHours <= (cfg.rapidTransferWindowHours || 2) && cAmt > 0 && dAmt >= (cAmt * 0.70)) {
         rapidPairs.push({ credit: c, debit: d, dwellMinutes: Math.round(diffHours * 60) });
       }
     });
@@ -364,24 +461,43 @@ function calculateMuleRiskScore(account, allTransactions, settings = null) {
   if (rapidPairs.length > 0) {
     score += weights.rapidInOut;
     const p = rapidPairs[0];
+    const citedIds = Array.from(new Set(rapidPairs.flatMap(rp => [rp.credit.id, rp.debit.id])));
     triggeredRules.push({
       rule: "Rapid In-Out Transfer",
       weight: weights.rapidInOut,
       citation: `Inflow of ₹${p.credit.amount.toLocaleString('en-IN')} (${p.credit.id}) routed out in ${p.dwellMinutes} mins via ${p.debit.id}`,
-      supportingTxnIds: [p.credit.id, p.debit.id],
+      supportingTxnIds: citedIds,
       severity: "CRITICAL"
     });
   }
 
-  // Rule 2: Many-to-One Credits (Distinct counterparties crediting within 24h)
-  const uniqueCreditSenders = new Set(credits.map(c => c.counterpartyAccount).filter(Boolean));
-  if (uniqueCreditSenders.size >= 2) {
+  // Rule 2: Many-to-One Credits (Distinct counterparties crediting within a sliding 24-hour window)
+  const WINDOW_24H_MS = 24 * 3600 * 1000;
+  let bestManyToOneWindow = [];
+  let bestUniqueSenders = new Set();
+  for (let i = 0; i < credits.length; i++) {
+    const startT = new Date(credits[i].timestamp).getTime();
+    const winTxns = [];
+    const winSenders = new Set();
+    for (let j = i; j < credits.length; j++) {
+      const curT = new Date(credits[j].timestamp).getTime();
+      if (curT - startT <= WINDOW_24H_MS) {
+        winTxns.push(credits[j]);
+        if (credits[j].counterpartyAccount) winSenders.add(credits[j].counterpartyAccount);
+      } else break;
+    }
+    if (winSenders.size > bestUniqueSenders.size) {
+      bestUniqueSenders = winSenders;
+      bestManyToOneWindow = winTxns;
+    }
+  }
+  if (bestUniqueSenders.size >= 2) {
     score += weights.manyToOne;
     triggeredRules.push({
       rule: "Many-to-One Credits",
       weight: weights.manyToOne,
-      citation: `${uniqueCreditSenders.size} distinct counterparties deposited into account within observation window`,
-      supportingTxnIds: credits.map(c => c.id),
+      citation: `${bestUniqueSenders.size} distinct counterparties deposited into account within a 24h window`,
+      supportingTxnIds: bestManyToOneWindow.map(c => c.id),
       severity: "SUSPICIOUS"
     });
   }
@@ -389,7 +505,7 @@ function calculateMuleRiskScore(account, allTransactions, settings = null) {
   // Rule 3: Round-Figure Layering
   const roundTxns = accountTxns.filter(t => {
     const amt = parseFloat(t.amount || t.debit || t.credit || 0);
-    return amt > 0 && (amt % 1000 === 0);
+    return amt >= 1000 && (amt % 1000 === 0);
   });
   if (roundTxns.length >= 2) {
     score += weights.roundFigure;
@@ -402,14 +518,26 @@ function calculateMuleRiskScore(account, allTransactions, settings = null) {
     });
   }
 
-  // Rule 4: High Transaction Velocity
-  if (accountTxns.length >= (cfg.velocityTxnThreshold || 4)) {
+  // Rule 4: High Transaction Velocity (Sliding 24-hour window over actual timestamps)
+  const velThreshold = cfg.velocityTxnThreshold || 4;
+  let bestVelocityWindow = [];
+  for (let i = 0; i < accountTxns.length; i++) {
+    const startT = new Date(accountTxns[i].timestamp).getTime();
+    const winTxns = [];
+    for (let j = i; j < accountTxns.length; j++) {
+      if (new Date(accountTxns[j].timestamp).getTime() - startT <= WINDOW_24H_MS) {
+        winTxns.push(accountTxns[j]);
+      } else break;
+    }
+    if (winTxns.length > bestVelocityWindow.length) bestVelocityWindow = winTxns;
+  }
+  if (bestVelocityWindow.length >= velThreshold) {
     score += weights.highVelocity;
     triggeredRules.push({
       rule: "High Transaction Velocity",
       weight: weights.highVelocity,
-      citation: `${accountTxns.length} transactions executed in condensed time frame`,
-      supportingTxnIds: accountTxns.map(t => t.id),
+      citation: `${bestVelocityWindow.length} transactions executed within a 24h sliding window (threshold: ${velThreshold})`,
+      supportingTxnIds: bestVelocityWindow.map(t => t.id),
       severity: "SUSPICIOUS"
     });
   }
@@ -431,13 +559,18 @@ function calculateMuleRiskScore(account, allTransactions, settings = null) {
     }
   }
 
-  // Rule 6: Cross-Case Syndicate Link
-  const otherCases = MuleNetState.cases.filter(c => c.caseId !== MuleNetState.currentCaseId);
+  // Rule 6: Cross-Case Syndicate Link (Strictly computed from actual transactions in other cases)
+  const otherCases = MuleNetState.cases.filter(c => c.caseId !== activeCaseId);
   let crossCaseMatches = [];
+  let crossCaseTxnIds = [];
   otherCases.forEach(c => {
-    const hasMatch = MuleNetState.transactions.some(t => t.caseId === c.caseId && t.account === account.accountNumber);
-    if (hasMatch || account.crossCase) {
+    const matchingTxns = MuleNetState.transactions.filter(t =>
+      t.caseId === c.caseId &&
+      (t.account === account.accountNumber || t.counterpartyAccount === account.accountNumber)
+    );
+    if (matchingTxns.length > 0) {
       crossCaseMatches.push(c.firNo);
+      matchingTxns.forEach(mt => crossCaseTxnIds.push(mt.id));
     }
   });
 
@@ -446,44 +579,69 @@ function calculateMuleRiskScore(account, allTransactions, settings = null) {
     triggeredRules.push({
       rule: "Cross-Case Syndicate Match",
       weight: weights.crossCaseMatch,
-      citation: `Account appears across multiple state FIRs: ${crossCaseMatches.join(', ')}`,
-      supportingTxnIds: [],
+      citation: `Account appears in transactions across multiple FIRs: ${crossCaseMatches.join(', ')}`,
+      supportingTxnIds: crossCaseTxnIds,
       severity: "CRITICAL"
     });
   }
 
-  // Rule 7: Dormant to Active Behavior
-  if (account.dormancy && account.dormancy.toLowerCase().includes('reactivated')) {
+  // Rule 7: Dormant-to-Active Behavior (Calculated from real transaction timestamp gaps or lastActivityDate)
+  const dormancyThresholdDays = cfg.dormancyDays || 30;
+  let maxGapDays = 0;
+  let dormancyCitedIds = [];
+  for (let i = 1; i < accountTxns.length; i++) {
+    const prevT = new Date(accountTxns[i - 1].timestamp).getTime();
+    const curT = new Date(accountTxns[i].timestamp).getTime();
+    const gapDays = (curT - prevT) / (1000 * 3600 * 24);
+    if (gapDays >= dormancyThresholdDays && gapDays > maxGapDays) {
+      maxGapDays = Math.round(gapDays);
+      dormancyCitedIds = [accountTxns[i - 1].id, accountTxns[i].id];
+    }
+  }
+  if (maxGapDays === 0 && account.lastActivityDate && accountTxns.length > 0) {
+    const lastActT = new Date(account.lastActivityDate).getTime();
+    const firstBurstT = new Date(accountTxns[0].timestamp).getTime();
+    const gapDays = (firstBurstT - lastActT) / (1000 * 3600 * 24);
+    if (!isNaN(gapDays) && gapDays >= dormancyThresholdDays) {
+      maxGapDays = Math.round(gapDays);
+      dormancyCitedIds = [accountTxns[0].id];
+    }
+  }
+  if (maxGapDays >= dormancyThresholdDays) {
     score += weights.dormantToActive;
     triggeredRules.push({
       rule: "Dormant-to-Active Spike",
       weight: weights.dormantToActive,
-      citation: account.dormancy,
-      supportingTxnIds: [],
+      citation: `Account reactivated after ${maxGapDays} days of inactivity (threshold: ${dormancyThresholdDays}d)`,
+      supportingTxnIds: dormancyCitedIds,
       severity: "SUSPICIOUS"
     });
   }
 
   // Rule 8: Repeated Counterparties
-  const cpCounts = {};
+  const cpMap = {};
   accountTxns.forEach(t => {
-    if (t.counterpartyAccount) cpCounts[t.counterpartyAccount] = (cpCounts[t.counterpartyAccount] || 0) + 1;
+    if (t.counterpartyAccount) {
+      if (!cpMap[t.counterpartyAccount]) cpMap[t.counterpartyAccount] = [];
+      cpMap[t.counterpartyAccount].push(t.id);
+    }
   });
-  const repeatedCps = Object.keys(cpCounts).filter(k => cpCounts[k] >= 2);
+  const repeatedCps = Object.keys(cpMap).filter(k => cpMap[k].length >= 2);
   if (repeatedCps.length > 0) {
     score += weights.repeatedCounterparties;
+    const repeatedIds = repeatedCps.flatMap(k => cpMap[k]);
     triggeredRules.push({
       rule: "Repeated Counterparties",
       weight: weights.repeatedCounterparties,
       citation: `Recurring counterparties identified: ${repeatedCps.join(', ')}`,
-      supportingTxnIds: [],
+      supportingTxnIds: repeatedIds,
       severity: "SUSPICIOUS"
     });
   }
 
-  const normalizedScore = Math.min(100, Math.max(10, score));
+  const normalizedScore = accountTxns.length === 0 ? 0 : Math.min(100, Math.max(0, score));
   let category = "LOW";
-  const thresholds = (cfg && cfg.thresholds) || { highRisk: 70, mediumRisk: 40 };
+  const thresholds = cfg.thresholds || { highRisk: 70, mediumRisk: 40 };
   if (normalizedScore >= thresholds.highRisk) category = "HIGH";
   else if (normalizedScore >= thresholds.mediumRisk) category = "MEDIUM";
 
@@ -495,26 +653,31 @@ function calculateMuleRiskScore(account, allTransactions, settings = null) {
 }
 
 // -------------------------------------------------------------
-// ENGINE 3: DYNAMIC CHRONOLOGICAL MONEY TRAIL ENGINE (FIFO & Proportional)
-// Reconstructs arbitrary transaction chains without hardcoding!
+// ENGINE 3: GLOBALLY CHRONOLOGICAL MONEY TRAIL ENGINE (FIFO & Proportional)
+// Supports repeated account visits, circular transfers, mixed opening balances,
+// strict case isolation, and explicit unresolved/external destinations.
 // -------------------------------------------------------------
 function traceMoneyTrailFromVictim(victimUTR, attributionMode = 'FIFO') {
   if (!victimUTR || typeof victimUTR !== 'string') {
-    return { error: "Invalid UTR parameter." };
+    return { error: "Invalid UTR parameter.", victimAmount: 0, totalResidual: 0, externalOutflow: 0, unresolvedOutflow: 0, nodes: {}, edges: [] };
   }
 
+  const activeCaseId = MuleNetState.currentCaseId;
   const cleanUtr = victimUTR.trim().toUpperCase();
-  // Find transaction matching UTR in current case or globally
-  const matchedTxn = MuleNetState.transactions.find(t => 
-    t.utr && t.utr.trim().toUpperCase() === cleanUtr &&
-    (t.caseId === MuleNetState.currentCaseId || !t.caseId)
+
+  // Strict case isolation: match ONLY a CREDIT transaction in the active case
+  const caseTxns = MuleNetState.transactions.filter(t => t.caseId === activeCaseId);
+  const matchedTxn = caseTxns.find(t =>
+    t.utr && t.utr.trim().toUpperCase() === cleanUtr && t.direction === 'CREDIT'
   );
 
   if (!matchedTxn) {
     return {
-      error: `UTR "${victimUTR}" was not found in the transaction ledger for Case ${MuleNetState.currentCaseId}.`,
+      error: `UTR "${victimUTR}" was not found as a credit inflow in the transaction ledger for Case ${activeCaseId}.`,
       victimAmount: 0,
       totalResidual: 0,
+      externalOutflow: 0,
+      unresolvedOutflow: 0,
       nodes: {},
       edges: []
     };
@@ -526,14 +689,18 @@ function traceMoneyTrailFromVictim(victimUTR, attributionMode = 'FIFO') {
   const victimName = matchedTxn.counterpartyName || 'Victim Complainant';
   const victimInflowTime = new Date(matchedTxn.timestamp).getTime();
 
+  // Identify accounts that have statement coverage (at least one ledger row in this case)
+  const coveredAccounts = new Set(caseTxns.map(t => t.account).filter(Boolean));
+  const maxHops = (MuleNetState.settings && MuleNetState.settings.maxHops) || 5;
+
   let nodes = {};
   let edges = [];
-  let visitedAccounts = new Set();
+  let accountBatches = {}; // acc -> [{ isVictimFund, initialAmount, available, timestamp, layer }]
 
   // Root Victim Node
   nodes['VICTIM'] = {
     id: 'VICTIM',
-    label: `${victimName}\\n(Victim Origin)`,
+    label: `${victimName}\n(Victim Origin)`,
     rawLabel: victimName,
     bank: matchedTxn.bank || 'Origin Bank',
     account: victimAccount,
@@ -544,14 +711,43 @@ function traceMoneyTrailFromVictim(victimUTR, attributionMode = 'FIFO') {
     outflow: victimAmount
   };
 
-  // Track unspent batches per account
-  let accountBatches = {};
-  accountBatches[collectorAccount] = [{
-    source: 'VICTIM',
+  // Pre-compute opening / pre-existing non-victim balances for all covered accounts
+  coveredAccounts.forEach(acc => {
+    accountBatches[acc] = [];
+    const accTxnsSorted = caseTxns
+      .filter(t => t.account === acc)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    const txnsBefore = accTxnsSorted.filter(t => new Date(t.timestamp).getTime() < victimInflowTime);
+    let preExistingNonVictim = 0;
+    if (txnsBefore.length > 0) {
+      const lastBefore = txnsBefore[txnsBefore.length - 1];
+      if (typeof lastBefore.balance === 'number' && !isNaN(lastBefore.balance)) {
+        preExistingNonVictim = Math.max(0, lastBefore.balance);
+      }
+    } else if (acc === collectorAccount && typeof matchedTxn.balance === 'number' && !isNaN(matchedTxn.balance)) {
+      preExistingNonVictim = Math.max(0, matchedTxn.balance - victimAmount);
+    }
+
+    if (preExistingNonVictim > 0.001) {
+      accountBatches[acc].push({
+        isVictimFund: false,
+        initialAmount: preExistingNonVictim,
+        available: preExistingNonVictim,
+        timestamp: 0,
+        layer: 0
+      });
+    }
+  });
+
+  // Seed victim inflow batch on collectorAccount
+  accountBatches[collectorAccount].push({
+    isVictimFund: true,
     initialAmount: victimAmount,
     available: victimAmount,
-    timestamp: victimInflowTime
-  }];
+    timestamp: victimInflowTime,
+    layer: 1
+  });
 
   const collectorAccMeta = MuleNetState.accounts.find(a => a.accountNumber === collectorAccount) || {
     accountNumber: collectorAccount,
@@ -562,7 +758,7 @@ function traceMoneyTrailFromVictim(victimUTR, attributionMode = 'FIFO') {
 
   nodes[collectorAccount] = {
     id: collectorAccount,
-    label: `${collectorAccMeta.holder}\\n(Acc: ${collectorAccount})`,
+    label: `${collectorAccMeta.holder}\n(Acc: ${collectorAccount})`,
     rawLabel: collectorAccMeta.holder,
     bank: collectorAccMeta.bank,
     account: collectorAccount,
@@ -571,6 +767,7 @@ function traceMoneyTrailFromVictim(victimUTR, attributionMode = 'FIFO') {
     received: victimAmount,
     retained: victimAmount,
     outflow: 0,
+    covered: true,
     riskScore: collectorAccMeta.riskScore || 75
   };
 
@@ -585,134 +782,189 @@ function traceMoneyTrailFromVictim(victimUTR, attributionMode = 'FIFO') {
     label: `₹${victimAmount.toLocaleString('en-IN')}`
   });
 
-  // Breadth-First Chronological Queue
-  let queue = [{ account: collectorAccount, layer: 1 }];
-  visitedAccounts.add(collectorAccount);
-  const maxHops = (MuleNetState.settings && MuleNetState.settings.maxHops) || 5;
+  // Globally chronological event stream for all transactions at or after victim inflow
+  const chronologicalEvents = caseTxns
+    .filter(t => t.id !== matchedTxn.id && new Date(t.timestamp).getTime() >= victimInflowTime)
+    .sort((a, b) => {
+      const diff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      if (diff !== 0) return diff;
+      // Process DEBITs slightly before CREDITs at identical timestamps so transfers propagate cleanly
+      if (a.direction === 'DEBIT' && b.direction === 'CREDIT') return -1;
+      if (a.direction === 'CREDIT' && b.direction === 'DEBIT') return 1;
+      return String(a.id).localeCompare(String(b.id));
+    });
 
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (current.layer >= maxHops) continue;
+  // Track internal transfers already propagated by a DEBIT so matching CREDIT rows aren't double-counted as external non-victim deposits
+  const matchedInternalCredits = new Set();
 
-    const currAcc = current.account;
-    const currBatches = accountBatches[currAcc] || [];
-    let totalAvailable = currBatches.reduce((sum, b) => sum + b.available, 0);
-    if (totalAvailable <= 0.01) continue;
+  for (const txn of chronologicalEvents) {
+    const txnTime = new Date(txn.timestamp).getTime();
+    const acc = txn.account;
+    if (!acc) continue;
+    if (!accountBatches[acc]) accountBatches[acc] = [];
 
-    // Filter subsequent debits occurring strictly AFTER victim fund arrival
-    const candidateDebits = MuleNetState.transactions
-      .filter(t => 
-        t.account === currAcc &&
-        t.direction === 'DEBIT' &&
-        new Date(t.timestamp).getTime() >= victimInflowTime
-      )
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    if (txn.direction === 'CREDIT') {
+      const creditKey = `${acc}|${txn.utr || ''}|${parseFloat(txn.credit || txn.amount || 0)}`;
+      if (matchedInternalCredits.has(creditKey)) {
+        matchedInternalCredits.delete(creditKey);
+        continue; // Already accounted for by the sender DEBIT hop
+      }
+      const creditAmt = parseFloat(txn.credit || txn.amount || 0);
+      if (creditAmt > 0) {
+        accountBatches[acc].push({
+          isVictimFund: false,
+          initialAmount: creditAmt,
+          available: creditAmt,
+          timestamp: txnTime,
+          layer: 0
+        });
+      }
+      continue;
+    }
 
-    for (const debit of candidateDebits) {
-      if (totalAvailable <= 0.01) break;
-      const debitTime = new Date(debit.timestamp).getTime();
-      const debitAmt = parseFloat(debit.debit || debit.amount || 0);
+    if (txn.direction === 'DEBIT') {
+      const debitAmt = parseFloat(txn.debit || txn.amount || 0);
       if (debitAmt <= 0) continue;
 
-      let attributedForThisDebit = 0;
+      const batches = accountBatches[acc];
+      const eligibleBatches = batches.filter(b => b.available > 0.0001 && b.timestamp <= txnTime);
+      const totalVictimAvail = eligibleBatches.filter(b => b.isVictimFund).reduce((s, b) => s + b.available, 0);
+
+      if (totalVictimAvail <= 0.0001) {
+        // Still deplete non-victim funds accurately in chronological order
+        let remNonVictim = debitAmt;
+        for (const b of eligibleBatches) {
+          if (remNonVictim <= 0.0001) break;
+          const take = Math.min(b.available, remNonVictim);
+          b.available -= take;
+          remNonVictim -= take;
+        }
+        continue;
+      }
+
+      const currLayer = nodes[acc] ? nodes[acc].layer : 1;
+      if (currLayer >= maxHops) continue;
+
+      let attributedVictimAmt = 0;
 
       if (attributionMode === 'FIFO') {
-        for (let b of currBatches) {
-          if (b.available <= 0) continue;
-          if (debitTime < b.timestamp) continue; // Chronological precedence!
-
-          const canTake = Math.min(b.available, debitAmt - attributedForThisDebit);
+        // Strict Chronological FIFO across both non-victim opening batches and victim batches
+        eligibleBatches.sort((a, b) => a.timestamp - b.timestamp);
+        let remainingToDebit = debitAmt;
+        for (const b of eligibleBatches) {
+          if (remainingToDebit <= 0.0001) break;
+          const canTake = Math.min(b.available, remainingToDebit);
           b.available -= canTake;
-          attributedForThisDebit += canTake;
-          if (attributedForThisDebit >= debitAmt) break;
+          remainingToDebit -= canTake;
+          if (b.isVictimFund) {
+            attributedVictimAmt += canTake;
+          }
         }
       } else {
-        // Proportional Attribution
-        const availableInBatches = currBatches.filter(b => debitTime >= b.timestamp).reduce((sum, b) => sum + b.available, 0);
-        if (availableInBatches > 0) {
-          const ratio = Math.min(1.0, availableInBatches / (debit.balance ? (parseFloat(debit.balance) + debitAmt) : availableInBatches));
-          attributedForThisDebit = Math.min(availableInBatches, debitAmt * ratio);
-          // Deplete proportionally across batches
-          for (let b of currBatches) {
-            if (b.available > 0 && debitTime >= b.timestamp) {
-              const bShare = (b.available / availableInBatches) * attributedForThisDebit;
-              b.available = Math.max(0, b.available - bShare);
+        // Proportional Attribution across all active victim & non-victim batches
+        const totalAllAvail = eligibleBatches.reduce((s, b) => s + b.available, 0);
+        if (totalAllAvail > 0.0001) {
+          const effectiveDebit = Math.min(debitAmt, totalAllAvail);
+          const victimRatio = totalVictimAvail / totalAllAvail;
+          attributedVictimAmt = effectiveDebit * victimRatio;
+          const nonVictimAmt = effectiveDebit - attributedVictimAmt;
+
+          for (const b of eligibleBatches) {
+            if (b.isVictimFund && totalVictimAvail > 0) {
+              const share = (b.available / totalVictimAvail) * attributedVictimAmt;
+              b.available = Math.max(0, b.available - share);
+            } else if (!b.isVictimFund) {
+              const totalNonVictimAvail = totalAllAvail - totalVictimAvail;
+              if (totalNonVictimAvail > 0) {
+                const share = (b.available / totalNonVictimAvail) * nonVictimAmt;
+                b.available = Math.max(0, b.available - share);
+              }
             }
           }
         }
       }
 
-      if (attributedForThisDebit > 0) {
-        nodes[currAcc].outflow += attributedForThisDebit;
-        nodes[currAcc].retained = Math.max(0, nodes[currAcc].received - nodes[currAcc].outflow);
+      if (attributedVictimAmt > 0.001) {
+        if (nodes[acc]) {
+          nodes[acc].outflow += attributedVictimAmt;
+          nodes[acc].retained = Math.max(0, nodes[acc].received - nodes[acc].outflow);
+        }
 
-        const destAcc = debit.counterpartyAccount || 'EXTERNAL_DEST';
-        const destName = debit.counterpartyName || 'Beneficiary Sink';
-        const nextLayer = current.layer + 1;
+        const destAcc = txn.counterpartyAccount || 'EXTERNAL_DEST';
+        const destName = txn.counterpartyName || 'Beneficiary Sink';
+        const isExternalSink = destAcc === 'EXTERNAL_DEST' || destAcc.startsWith('ATM') || destAcc.startsWith('CHARGES');
+        const hasCoverage = !isExternalSink && coveredAccounts.has(destAcc);
+        const nextLayer = currLayer + 1;
 
         if (!nodes[destAcc]) {
           const destMeta = MuleNetState.accounts.find(a => a.accountNumber === destAcc) || {
             accountNumber: destAcc,
             holder: destName,
-            bank: debit.bank || 'Banking Entity',
+            bank: txn.bank || 'Banking Entity',
             riskScore: 70
           };
 
+          let nodeType = isExternalSink ? 'EXTERNAL_SINK' : (hasCoverage ? (nextLayer >= 3 ? 'LAYER_3_SINK' : `LAYER_${nextLayer}`) : 'UNRESOLVED_NO_STATEMENT');
+
           nodes[destAcc] = {
             id: destAcc,
-            label: `${destMeta.holder}\\n(Acc: ${destAcc})`,
+            label: `${destMeta.holder}\n(Acc: ${destAcc})${!hasCoverage && !isExternalSink ? '\n[No Stmt]' : ''}`,
             rawLabel: destMeta.holder,
             bank: destMeta.bank,
             account: destAcc,
             layer: nextLayer,
-            type: nextLayer >= 3 ? 'LAYER_3_SINK' : `LAYER_${nextLayer}`,
+            type: nodeType,
             received: 0,
             retained: 0,
             outflow: 0,
+            covered: hasCoverage,
+            isExternalSink: isExternalSink,
             riskScore: destMeta.riskScore || 70,
-            isFreezePriority: true
+            isFreezePriority: !isExternalSink
           };
         }
 
-        nodes[destAcc].received += attributedForThisDebit;
-        nodes[destAcc].retained = nodes[destAcc].received - nodes[destAcc].outflow;
+        nodes[destAcc].received += attributedVictimAmt;
+        nodes[destAcc].retained = Math.max(0, nodes[destAcc].received - nodes[destAcc].outflow);
 
-        const edgeId = `EDGE_${currAcc}_${destAcc}_${debit.id}`;
         edges.push({
-          id: edgeId,
-          source: currAcc,
+          id: `EDGE_${acc}_${destAcc}_${txn.id}`,
+          source: acc,
           target: destAcc,
           amount: debitAmt,
-          attributedAmount: attributedForThisDebit,
-          timestamp: debit.timestamp,
-          utr: debit.utr || 'REF-NIL',
-          label: `₹${attributedForThisDebit.toLocaleString('en-IN')}`
+          attributedAmount: attributedVictimAmt,
+          timestamp: txn.timestamp,
+          utr: txn.utr || 'REF-NIL',
+          label: `₹${Math.round(attributedVictimAmt).toLocaleString('en-IN')}`
         });
 
-        if (!accountBatches[destAcc]) accountBatches[destAcc] = [];
-        accountBatches[destAcc].push({
-          source: currAcc,
-          initialAmount: attributedForThisDebit,
-          available: attributedForThisDebit,
-          timestamp: debitTime
-        });
-
-        if (!visitedAccounts.has(destAcc) && destAcc !== 'EXTERNAL_DEST' && !destAcc.startsWith('ATM')) {
-          visitedAccounts.add(destAcc);
-          queue.push({ account: destAcc, layer: nextLayer });
+        if (hasCoverage) {
+          if (!accountBatches[destAcc]) accountBatches[destAcc] = [];
+          accountBatches[destAcc].push({
+            isVictimFund: true,
+            initialAmount: attributedVictimAmt,
+            available: attributedVictimAmt,
+            timestamp: txnTime,
+            layer: nextLayer
+          });
+          matchedInternalCredits.add(`${destAcc}|${txn.utr || ''}|${debitAmt}`);
         }
-
-        totalAvailable = currBatches.reduce((sum, b) => sum + b.available, 0);
       }
     }
   }
 
   let totalResidual = 0;
   let externalOutflow = 0;
+  let unresolvedOutflow = 0;
+
   Object.values(nodes).forEach(n => {
     if (n.id !== 'VICTIM') {
-      if (n.id === 'EXTERNAL_DEST' || n.id.startsWith('ATM')) {
-        externalOutflow += n.received;
+      if (n.isExternalSink) {
+        externalOutflow += n.retained;
+      } else if (!n.covered) {
+        // Explicit distinction: destination bank accounts without uploaded statement coverage
+        unresolvedOutflow += n.retained;
+        totalResidual += n.retained; // Included in total traceable residual exposure for freeze targeting unless external
       } else {
         totalResidual += n.retained;
       }
@@ -725,8 +977,9 @@ function traceMoneyTrailFromVictim(victimUTR, attributionMode = 'FIFO') {
     victimAmount,
     totalResidual,
     externalOutflow,
+    unresolvedOutflow,
     discrepancy,
-    isBalanced: Math.abs(discrepancy) < 0.01,
+    isBalanced: Math.abs(discrepancy) < 0.05,
     nodes,
     edges
   };
@@ -740,20 +993,20 @@ function calculateDynamicFreezePriority(traceResult) {
     return [];
   }
 
-  const nodes = Object.values(traceResult.nodes).filter(n => n.id !== 'VICTIM' && n.id !== 'EXTERNAL_DEST' && !n.id.startsWith('ATM'));
+  const nodes = Object.values(traceResult.nodes).filter(n => n.id !== 'VICTIM' && !n.isExternalSink && n.id !== 'EXTERNAL_DEST' && !n.id.startsWith('ATM') && !n.id.startsWith('CHARGES'));
   const victimAmt = traceResult.victimAmount || 1;
 
   const ranked = nodes.map(node => {
     const accMeta = MuleNetState.accounts.find(a => a.accountNumber === node.account) || {
+      accountNumber: node.account,
       holder: node.rawLabel || node.account,
       bank: node.bank || 'Banking Entity',
       branch: 'Main Branch',
-      riskScore: node.riskScore || 70,
-      crossCase: false
+      riskScore: node.riskScore || 70
     };
 
     const analysis = calculateMuleRiskScore(accMeta, MuleNetState.transactions);
-    const residual = node.retained;
+    const residual = Math.round(node.retained * 100) / 100;
     const residualRatio = residual / victimAmt;
     const priorityScore = (residualRatio * 60) + (analysis.score * 0.30) + (node.outflow > 0 ? 10 : 0);
 
@@ -761,18 +1014,21 @@ function calculateDynamicFreezePriority(traceResult) {
     if (residual >= 15000 || priorityScore >= 60) priorityLevel = "IMMEDIATE";
     else if (residual > 0 || priorityScore >= 35) priorityLevel = "HIGH";
 
+    const hasCrossCase = analysis.triggeredRules.some(r => r.rule === 'Cross-Case Syndicate Match');
+
     return {
       accountNumber: node.account,
       bank: accMeta.bank,
       branch: accMeta.branch || 'Branch',
       holder: accMeta.holder,
       residual: residual,
-      inflow: node.received,
-      outflow: node.outflow,
+      inflow: Math.round(node.received * 100) / 100,
+      outflow: Math.round(node.outflow * 100) / 100,
       riskScore: analysis.score,
       priorityLevel: priorityLevel,
       priorityScore: priorityScore,
-      crossCase: accMeta.crossCase || false
+      covered: node.covered !== false,
+      crossCase: hasCrossCase
     };
   });
 
@@ -1217,76 +1473,164 @@ function inspectMoneyTrailNode(nodeData) {
 
 // -------------------------------------------------------------
 // ACTUAL FILE INGESTION PARSERS (CSV, XLSX, PDF, JSON)
+// Zero fabricated defaults, strict validation & rejected-row reporting
 // -------------------------------------------------------------
+function normalizeDateString(rawVal) {
+  if (rawVal === null || rawVal === undefined || rawVal === '') return null;
+  if (typeof rawVal === 'number' && rawVal > 20000 && rawVal < 80000) {
+    // Excel serial date
+    const utcDays = Math.floor(rawVal - 25569);
+    const d = new Date(utcDays * 86400 * 1000);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  }
+  const s = String(rawVal).trim();
+  const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (isoMatch) {
+    const y = isoMatch[1], m = isoMatch[2].padStart(2, '0'), d = isoMatch[3].padStart(2, '0');
+    const dt = new Date(`${y}-${m}-${d}T00:00:00Z`);
+    if (!isNaN(dt.getTime())) return `${y}-${m}-${d}`;
+  }
+  const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, '0'), m = dmyMatch[2].padStart(2, '0'), y = dmyMatch[3];
+    const dt = new Date(`${y}-${m}-${d}T00:00:00Z`);
+    if (!isNaN(dt.getTime())) return `${y}-${m}-${d}`;
+  }
+  return null;
+}
+
+function parseStrictNumber(rawVal, allowEmptyAsZero = true) {
+  if (rawVal === null || rawVal === undefined || String(rawVal).trim() === '' || String(rawVal).trim() === '-') {
+    return allowEmptyAsZero ? 0 : NaN;
+  }
+  const cleaned = String(rawVal).replace(/[₹,\s]/g, '');
+  if (!/^-?\d+(\.\d+)?$/.test(cleaned)) return NaN;
+  return parseFloat(cleaned);
+}
+
+function renderIngestionDiagnostics(diagnostics) {
+  const box = document.getElementById('ingestionDiagnosticsContainer');
+  if (!box) return;
+  if (!diagnostics || diagnostics.length === 0) {
+    box.classList.add('hidden');
+    box.innerHTML = '';
+    return;
+  }
+  box.classList.remove('hidden');
+  box.innerHTML = diagnostics.map(d => {
+    const rejectedHtml = (d.rejectedRows && d.rejectedRows.length > 0)
+      ? `<div class="mt-1 pl-2 border-l-2 border-red-400 text-red-800">Rejected Rows (${d.rejectedRows.length}): ${d.rejectedRows.slice(0, 5).map(r => `Row ${r.row}: ${escapeHTML(r.reason)}`).join(' | ')}</div>`
+      : '';
+    const discHtml = (d.discrepancies && d.discrepancies.length > 0)
+      ? `<div class="mt-1 pl-2 border-l-2 border-amber-500 text-amber-900">Balance Mismatches (${d.discrepancies.length}): ${d.discrepancies.map(x => `Row ${x.row} (Expected ₹${x.expectedBalance.toLocaleString('en-IN')}, Actual ₹${x.actualBalance.toLocaleString('en-IN')})`).join(' | ')}</div>`
+      : '';
+    const errHtml = d.error ? `<div class="text-red-700 font-bold">Error: ${escapeHTML(d.error)}</div>` : '';
+    return `
+      <div class="p-1.5 bg-white/80 rounded border border-amber-200">
+        <div><strong>${escapeHTML(d.filename)}</strong> — Status: <span class="font-bold">${escapeHTML(d.status)}</span> (${d.validRows} valid, ${d.rejectedRows ? d.rejectedRows.length : 0} rejected)</div>
+        ${errHtml}${rejectedHtml}${discHtml}
+      </div>
+    `;
+  }).join('');
+}
+
 async function processUploadedFiles(files) {
   if (!files || files.length === 0) return;
   showToast("Processing Files", `Ingesting ${files.length} file(s)...`, "info");
 
+  const targetAccInput = (document.getElementById('ingestionTargetAccountInput')?.value || '').trim();
+  const pdfPassword = document.getElementById('pdfPasswordInput')?.value || '';
+
   let totalParsedTxns = 0;
   let totalDuplicates = 0;
+  let totalRejected = 0;
+  let diagnosticsList = [];
 
   for (let file of files) {
     try {
       const arrayBuffer = await file.arrayBuffer();
       const sha256 = await computeRealSHA256(arrayBuffer);
       const fileNameLower = file.name.toLowerCase();
-      let extractedTransactions = [];
+      let parseRes = { transactions: [], rejectedRows: [], errors: [] };
 
       if (fileNameLower.endsWith('.csv')) {
         const text = new TextDecoder().decode(arrayBuffer);
-        extractedTransactions = parseCSVStatement(text, file.name);
+        parseRes = parseCSVStatement(text, file.name, { targetAccount: targetAccInput });
       } else if (fileNameLower.endsWith('.xlsx') || fileNameLower.endsWith('.xls')) {
         if (typeof XLSX !== 'undefined') {
           const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const jsonRows = XLSX.utils.sheet_to_json(firstSheet);
-          extractedTransactions = parseExcelRows(jsonRows, file.name);
+          parseRes = parseExcelRows(jsonRows, file.name, { targetAccount: targetAccInput });
         } else {
-          alert("SheetJS library not loaded. Cannot parse Excel file.");
-          continue;
+          parseRes.errors.push("SheetJS library not loaded. Cannot parse Excel file.");
         }
       } else if (fileNameLower.endsWith('.json')) {
         const text = new TextDecoder().decode(arrayBuffer);
         const parsed = JSON.parse(text);
         if (parsed.transactions && Array.isArray(parsed.transactions)) {
-          extractedTransactions = parsed.transactions;
+          parseRes.transactions = parsed.transactions;
+        } else {
+          parseRes.errors.push("JSON does not contain a valid 'transactions' array.");
         }
       } else if (fileNameLower.endsWith('.pdf')) {
         if (typeof pdfjsLib !== 'undefined') {
-          extractedTransactions = await parsePDFStatement(arrayBuffer, file.name);
+          parseRes = await parsePDFStatement(arrayBuffer, file.name, { targetAccount: targetAccInput, password: pdfPassword });
         } else {
-          console.warn("PDF.js not available, recording file metadata.");
+          parseRes.errors.push("PDF.js library not loaded. Cannot parse PDF statement.");
         }
+      } else {
+        parseRes.errors.push("Unsupported file format. Supported: CSV, XLSX, XLS, PDF, JSON.");
       }
 
-      // Check duplicates & insert
+      const extractedTransactions = parseRes.transactions || [];
+      const rejectedRows = parseRes.rejectedRows || [];
+      const parseErrors = parseRes.errors || [];
+      totalRejected += rejectedRows.length;
+
+      // Run reconciliation on extracted rows for this statement
+      const recResult = extractedTransactions.length > 0
+        ? verifyStatementReconciliation(extractedTransactions)
+        : { isReconciled: false, discrepancies: [] };
+
+      if (recResult.discrepancies.length > 0) {
+        recResult.discrepancies.forEach(d => {
+          const flagged = extractedTransactions[d.row - 1];
+          if (flagged) flagged.flag = 'RECONCILIATION_EXCEPTION';
+        });
+      }
+
+      // Check duplicates & insert under strict active case isolation
       let addedForThisFile = 0;
+      let dupForThisFile = 0;
       extractedTransactions.forEach(newTxn => {
         newTxn.caseId = MuleNetState.currentCaseId;
-        const isDup = MuleNetState.transactions.some(existing => 
+        const isDup = MuleNetState.transactions.some(existing =>
+          existing.caseId === MuleNetState.currentCaseId &&
           existing.account === newTxn.account &&
           existing.date === newTxn.date &&
+          existing.time === newTxn.time &&
           parseFloat(existing.amount) === parseFloat(newTxn.amount) &&
           existing.direction === newTxn.direction &&
-          (existing.utr === newTxn.utr || !existing.utr)
+          (existing.utr === newTxn.utr || (!existing.utr && !newTxn.utr))
         );
 
         if (isDup) {
           totalDuplicates++;
+          dupForThisFile++;
         } else {
           MuleNetState.transactions.push(newTxn);
           addedForThisFile++;
           totalParsedTxns++;
 
-          // Auto-discover account
           if (newTxn.account && !MuleNetState.accounts.some(a => a.accountNumber === newTxn.account)) {
             MuleNetState.accounts.push({
               accountNumber: newTxn.account,
-              bank: newTxn.bank || 'Commercial Bank',
+              bank: newTxn.bank || 'Banking Entity',
               branch: 'Discovered Branch',
-              holder: newTxn.holder || 'Discovered Account Holder',
+              holder: newTxn.holder || 'Account Holder',
               layer: 'Discovered Node',
-              riskScore: 50,
+              riskScore: 0,
               residual: parseFloat(newTxn.balance || 0),
               inflow: parseFloat(newTxn.credit || 0),
               outflow: parseFloat(newTxn.debit || 0),
@@ -1297,53 +1641,90 @@ async function processUploadedFiles(files) {
         }
       });
 
-      // Record evidence file with real hash
+      // Determine honest reconciliation & validation status
+      let evStatus = 'FAILED_VALIDATION';
+      if (parseErrors.length > 0 && extractedTransactions.length === 0) {
+        evStatus = 'FAILED_VALIDATION';
+      } else if (recResult.discrepancies.length > 0) {
+        evStatus = 'RECONCILIATION_MISMATCH';
+      } else if (rejectedRows.length > 0) {
+        evStatus = 'PARTIAL_REJECTED';
+      } else if (extractedTransactions.length > 0 && recResult.isReconciled) {
+        evStatus = 'RECONCILED';
+      }
+
+      const evId = 'EV-' + String(MuleNetState.evidenceFiles.length + 1).padStart(3, '0');
+      // Store raw bytes in IndexedDB for genuine cryptographic re-verification
+      await MuleNetEvidenceDB.put(evId, arrayBuffer);
+
       const evItem = {
-        id: 'EV-' + String(MuleNetState.evidenceFiles.length + 1).padStart(3, '0'),
+        id: evId,
         filename: file.name,
-        type: file.type || (fileNameLower.endsWith('.csv') ? 'CSV Statement' : (fileNameLower.endsWith('.xlsx') ? 'Excel Workbook' : 'PDF Document')),
+        type: file.type || (fileNameLower.endsWith('.csv') ? 'CSV Statement' : (fileNameLower.endsWith('.xlsx') ? 'Excel Workbook' : (fileNameLower.endsWith('.pdf') ? 'PDF Document' : 'JSON Bundle'))),
         size: `${(file.size / 1024).toFixed(1)} KB`,
         uploadTime: new Date().toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString('en-GB') + ' IST',
         sha256: sha256,
+        integrityStatus: 'VERIFIED',
         caseId: MuleNetState.currentCaseId,
-        status: 'RECONCILED',
+        status: evStatus,
         rows: extractedTransactions.length,
-        notes: `Parsed ${addedForThisFile} transactions (${totalDuplicates} duplicates filtered).`
+        rejectedCount: rejectedRows.length,
+        notes: parseErrors.length > 0
+          ? parseErrors.join('; ')
+          : `Parsed ${addedForThisFile} transactions (${dupForThisFile} duplicates, ${rejectedRows.length} rejected, ${recResult.discrepancies.length} balance discrepancies).`
       };
       MuleNetState.evidenceFiles.unshift(evItem);
 
-      logAuditAction('STATEMENT_INGESTION', `Ingested ${file.name} (SHA-256: ${sha256.substring(0, 16)}...). Extracted ${addedForThisFile} rows.`);
+      if (parseErrors.length > 0 || rejectedRows.length > 0 || recResult.discrepancies.length > 0) {
+        diagnosticsList.push({
+          filename: file.name,
+          status: evStatus,
+          validRows: extractedTransactions.length,
+          rejectedRows,
+          discrepancies: recResult.discrepancies,
+          error: parseErrors.join('; ')
+        });
+      }
+
+      logAuditAction('STATEMENT_INGESTION', `Ingested ${file.name} (SHA-256: ${sha256.substring(0, 16)}...). Status: ${evStatus}, Valid: ${addedForThisFile}, Rejected: ${rejectedRows.length}.`);
     } catch (err) {
       console.error("Error processing file " + file.name + ":", err);
-      showToast("Ingestion Warning", `Failed to parse ${file.name}: ${err.message}`, "error");
+      diagnosticsList.push({ filename: file.name, status: 'ERROR', validRows: 0, rejectedRows: [], discrepancies: [], error: err.message });
+      showToast("Ingestion Error", `Failed to parse ${file.name}: ${err.message}`, "error");
     }
   }
 
+  MuleNetState.lastIngestionDiagnostics = diagnosticsList;
+  renderIngestionDiagnostics(diagnosticsList);
   saveToLocalStorage();
   renderAllViews();
   initCytoscapeMoneyTrail();
-  showToast("Statements Processed", `Successfully parsed ${totalParsedTxns} transactions (${totalDuplicates} duplicates filtered).`, "success");
+
+  if (totalParsedTxns === 0 && diagnosticsList.length > 0) {
+    showToast("Ingestion Rejected / Empty", `No valid transactions extracted. Check Ingestion Diagnostics (${totalRejected} rejected rows).`, "error");
+  } else {
+    showToast("Statements Processed", `Parsed ${totalParsedTxns} valid txns (${totalDuplicates} duplicates, ${totalRejected} rejected).`, totalRejected > 0 ? "info" : "success");
+  }
 }
 
-function parseCSVStatement(csvText, filename) {
-  const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
-  if (lines.length < 2) return [];
+function parseCSVStatement(csvText, filename = '', options = {}) {
+  const rawLines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+  let targetAccount = (options.targetAccount || '').trim();
+  const lines = [];
 
-  const headerLine = lines[0].toLowerCase();
-  const headers = headerLine.split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+  for (const line of rawLines) {
+    if (line.trim().startsWith('#')) {
+      const accMetaMatch = line.match(/account(?:\s*no|\s*number)?\s*[:=]\s*([A-Za-z0-9]+)/i);
+      if (accMetaMatch && !targetAccount) targetAccount = accMetaMatch[1];
+      continue;
+    }
+    lines.push(line);
+  }
 
-  const getIdx = (patterns) => headers.findIndex(h => patterns.some(p => h.includes(p)));
+  if (lines.length < 2) {
+    return { transactions: [], rejectedRows: [], errors: ['CSV file has no header or transaction rows.'] };
+  }
 
-  const dateIdx = getIdx(['date', 'txn date', 'transaction date']);
-  const timeIdx = getIdx(['time', 'txn time']);
-  const utrIdx = getIdx(['utr', 'reference', 'ref no', 'chq']);
-  const debitIdx = getIdx(['debit', 'dr', 'withdrawal']);
-  const creditIdx = getIdx(['credit', 'cr', 'deposit']);
-  const balIdx = getIdx(['balance', 'bal']);
-  const accIdx = getIdx(['account', 'acc']);
-  const cpIdx = getIdx(['counterparty', 'beneficiary', 'narration', 'description']);
-
-  let results = [];
   const splitCSV = (text) => {
     let res = [], cur = '', inQ = false;
     for (let c of text) {
@@ -1355,135 +1736,384 @@ function parseCSVStatement(csvText, filename) {
     return res;
   };
 
+  const headers = splitCSV(lines[0]).map(h => h.toLowerCase().trim().replace(/^["']|["']$/g, ''));
+  const getIdx = (patterns) => headers.findIndex(h => patterns.some(p => h === p || h.includes(p)));
+
+  const dateIdx = getIdx(['date', 'txn date', 'transaction date', 'value date']);
+  const timeIdx = getIdx(['time', 'txn time']);
+  const txnIdIdx = getIdx(['transaction_id', 'txn_id', 'txnid']);
+  const utrIdx = getIdx(['utr', 'reference', 'ref no', 'chq']);
+  const dirIdx = getIdx(['direction', 'type', 'dr/cr']);
+  const debitIdx = getIdx(['debit', 'dr', 'withdrawal']);
+  const creditIdx = getIdx(['credit', 'cr', 'deposit']);
+  const amountIdx = getIdx(['amount', 'amt']);
+  const balIdx = getIdx(['balance', 'bal', 'closing']);
+  const accIdx = headers.findIndex(h => (h === 'account' || h === 'account_no' || h === 'account_number' || h === 'acc_no') && !h.includes('counterparty'));
+  const cpAccIdx = getIdx(['counterparty_account', 'beneficiary_account', 'cp_account']);
+  const cpNameIdx = getIdx(['counterparty_name', 'beneficiary_name', 'counterparty', 'beneficiary']);
+  const narrIdx = getIdx(['narration', 'description', 'remarks', 'particulars']);
+
+  if (dateIdx < 0 || (debitIdx < 0 && creditIdx < 0 && amountIdx < 0)) {
+    return {
+      transactions: [],
+      rejectedRows: [],
+      errors: ['Missing required CSV columns (must contain Date and Debit/Credit or Amount headers).']
+    };
+  }
+
+  let results = [];
+  let rejectedRows = [];
+
   for (let i = 1; i < lines.length; i++) {
     const row = splitCSV(lines[i]);
-    const clean = (val) => (val || '').trim().replace(/^["']|["']$/g, '');
+    const clean = (val) => (val === undefined || val === null ? '' : String(val).trim().replace(/^["']|["']$/g, ''));
 
-    const dateVal = dateIdx >= 0 ? clean(row[dateIdx]) : new Date().toISOString().split('T')[0];
-    const timeVal = timeIdx >= 0 ? clean(row[timeIdx]) : '12:00:00';
-    const debitVal = debitIdx >= 0 ? parseFloat(clean(row[debitIdx])) || 0 : 0;
-    const creditVal = creditIdx >= 0 ? parseFloat(clean(row[creditIdx])) || 0 : 0;
-    const balVal = balIdx >= 0 ? parseFloat(clean(row[balIdx])) || 0 : 0;
-    const utrVal = utrIdx >= 0 ? clean(row[utrIdx]) : `UTR-GEN-${i}`;
-    const accVal = accIdx >= 0 ? clean(row[accIdx]) : (filename.includes('kotak') ? '9182736450' : (filename.includes('icici') ? '4091823719' : '5519283746'));
-    const cpVal = cpIdx >= 0 ? clean(row[cpIdx]) : 'Counterparty Entity';
+    const rawDate = clean(row[dateIdx]);
+    const dateVal = normalizeDateString(rawDate);
+    if (!dateVal) {
+      rejectedRows.push({ row: i + 1, reason: `Invalid or missing date "${rawDate}"`, raw: lines[i] });
+      continue;
+    }
+
+    const rawTime = timeIdx >= 0 ? clean(row[timeIdx]) : '';
+    const timeVal = rawTime && /^\d{1,2}:\d{2}(:\d{2})?$/.test(rawTime)
+      ? (rawTime.length === 5 ? rawTime + ':00' : rawTime)
+      : '00:00:00';
+
+    let debitVal = debitIdx >= 0 ? parseStrictNumber(clean(row[debitIdx]), true) : 0;
+    let creditVal = creditIdx >= 0 ? parseStrictNumber(clean(row[creditIdx]), true) : 0;
+
+    if (debitIdx < 0 && creditIdx < 0 && amountIdx >= 0) {
+      const amtVal = parseStrictNumber(clean(row[amountIdx]), false);
+      const rawDir = dirIdx >= 0 ? clean(row[dirIdx]).toUpperCase() : '';
+      if (isNaN(amtVal) || (rawDir !== 'CREDIT' && rawDir !== 'CR' && rawDir !== 'DEBIT' && rawDir !== 'DR')) {
+        rejectedRows.push({ row: i + 1, reason: `Invalid amount or direction "${rawDir}"`, raw: lines[i] });
+        continue;
+      }
+      if (rawDir === 'CREDIT' || rawDir === 'CR') creditVal = amtVal;
+      else debitVal = amtVal;
+    }
+
+    if (isNaN(debitVal) || isNaN(creditVal) || debitVal < 0 || creditVal < 0) {
+      rejectedRows.push({ row: i + 1, reason: 'Non-numeric or negative debit/credit value', raw: lines[i] });
+      continue;
+    }
+
+    const rawBal = balIdx >= 0 ? clean(row[balIdx]) : '';
+    const balVal = balIdx >= 0 ? parseStrictNumber(rawBal, false) : undefined;
+    if (balIdx >= 0 && rawBal !== '' && isNaN(balVal)) {
+      rejectedRows.push({ row: i + 1, reason: `Invalid running balance "${rawBal}"`, raw: lines[i] });
+      continue;
+    }
+
+    const explicitDir = dirIdx >= 0 ? clean(row[dirIdx]).toUpperCase() : '';
+    const direction = (explicitDir === 'CREDIT' || explicitDir === 'CR')
+      ? 'CREDIT'
+      : ((explicitDir === 'DEBIT' || explicitDir === 'DR') ? 'DEBIT' : (creditVal > 0 ? 'CREDIT' : 'DEBIT'));
+
+    const accVal = accIdx >= 0 ? clean(row[accIdx]) : targetAccount;
+    if (!accVal) {
+      rejectedRows.push({ row: i + 1, reason: 'Missing account number (no Account column and no target account provided)', raw: lines[i] });
+      continue;
+    }
+
+    const utrVal = utrIdx >= 0 ? clean(row[utrIdx]) : '';
+    const narrVal = narrIdx >= 0 ? clean(row[narrIdx]) : '';
+    const cpAccVal = cpAccIdx >= 0 ? clean(row[cpAccIdx]) : '';
+    const cpNameVal = cpNameIdx >= 0 ? clean(row[cpNameIdx]) : (narrVal || '');
+    const txnIdVal = txnIdIdx >= 0 && clean(row[txnIdIdx]) ? clean(row[txnIdIdx]) : `TXN-CSV-${i}`;
 
     results.push({
-      id: `TXN-UP-${Date.now()}-${i}`,
+      id: txnIdVal,
       date: dateVal,
       time: timeVal,
       timestamp: `${dateVal}T${timeVal}+05:30`,
-      bank: filename.includes('kotak') ? 'Kotak Mahindra' : (filename.includes('icici') ? 'ICICI Bank' : 'Commercial Bank'),
+      bank: 'Uploaded Statement',
       account: accVal,
-      holder: 'Account Holder',
-      direction: creditVal > 0 ? 'CREDIT' : 'DEBIT',
+      holder: 'Statement Account Holder',
+      direction: direction,
       debit: debitVal,
       credit: creditVal,
       amount: creditVal > 0 ? creditVal : debitVal,
       balance: balVal,
-      counterpartyAccount: cpVal.split(' ')[0] || 'CP_ACC',
-      counterpartyName: cpVal,
+      counterpartyAccount: cpAccVal,
+      counterpartyName: cpNameVal,
       utr: utrVal,
-      narration: cpVal,
+      narration: narrVal,
       sourceFile: filename,
       row: i + 1,
       flag: creditVal > 0 ? 'INGESTED_CREDIT' : 'INGESTED_DEBIT'
     });
   }
-  return results;
+
+  return { transactions: results, rejectedRows, errors: [] };
 }
 
-function parseExcelRows(jsonRows, filename) {
-  if (!jsonRows || jsonRows.length === 0) return [];
+function parseExcelRows(jsonRows, filename = '', options = {}) {
+  if (!jsonRows || jsonRows.length === 0) {
+    return { transactions: [], rejectedRows: [], errors: ['Excel sheet is empty.'] };
+  }
+
+  const targetAccount = (options.targetAccount || '').trim();
+  const sampleKeys = Object.keys(jsonRows[0]).map(k => k.toLowerCase());
+  const hasDateCol = sampleKeys.some(k => k.includes('date'));
+  const hasAmountCol = sampleKeys.some(k => k.includes('debit') || k.includes('credit') || k.includes('amount') || k.includes('dr') || k.includes('cr'));
+
+  if (!hasDateCol || !hasAmountCol) {
+    return { transactions: [], rejectedRows: [], errors: ['Excel sheet missing required Date or Debit/Credit/Amount headers.'] };
+  }
 
   let results = [];
+  let rejectedRows = [];
+
   jsonRows.forEach((r, idx) => {
-    // Find fields case-insensitively
-    const findVal = (keys) => {
+    const findVal = (keys, exclude = []) => {
       for (let k of Object.keys(r)) {
-        if (keys.some(cand => k.toLowerCase().includes(cand))) return r[k];
+        const kl = k.toLowerCase().trim();
+        if (exclude.some(ex => kl.includes(ex))) continue;
+        if (keys.some(cand => kl === cand || kl.includes(cand))) return r[k];
       }
       return null;
     };
 
-    const dateVal = findVal(['date']) || '2024-10-18';
-    const timeVal = findVal(['time']) || '12:00:00';
-    const utrVal = findVal(['utr', 'ref']) || `UTR-XLS-${idx+1}`;
-    const debitVal = parseFloat(findVal(['debit', 'dr']) || 0);
-    const creditVal = parseFloat(findVal(['credit', 'cr']) || 0);
-    const balVal = parseFloat(findVal(['balance', 'bal']) || 0);
-    const descVal = findVal(['narration', 'description', 'beneficiary']) || 'Excel Ingested Row';
-    const accVal = findVal(['account']) || (filename.includes('axis') ? '1192837465' : '9182736450');
+    const rawDate = findVal(['date']);
+    const dateVal = normalizeDateString(rawDate);
+    if (!dateVal) {
+      rejectedRows.push({ row: idx + 2, reason: `Invalid or missing date "${rawDate}"` });
+      return;
+    }
+
+    const rawTime = findVal(['time']);
+    const timeVal = rawTime && /^\d{1,2}:\d{2}(:\d{2})?$/.test(String(rawTime).trim())
+      ? (String(rawTime).trim().length === 5 ? String(rawTime).trim() + ':00' : String(rawTime).trim())
+      : '00:00:00';
+
+    const debitRaw = findVal(['debit', 'dr', 'withdrawal']);
+    const creditRaw = findVal(['credit', 'cr', 'deposit']);
+    const amtRaw = findVal(['amount', 'amt']);
+    let debitVal = debitRaw !== null ? parseStrictNumber(debitRaw, true) : 0;
+    let creditVal = creditRaw !== null ? parseStrictNumber(creditRaw, true) : 0;
+
+    if (debitRaw === null && creditRaw === null && amtRaw !== null) {
+      const parsedAmt = parseStrictNumber(amtRaw, false);
+      const dir = String(findVal(['direction', 'type']) || '').trim().toUpperCase();
+      if (isNaN(parsedAmt) || (dir !== 'CREDIT' && dir !== 'CR' && dir !== 'DEBIT' && dir !== 'DR')) {
+        rejectedRows.push({ row: idx + 2, reason: `Invalid amount or direction` });
+        return;
+      }
+      if (dir === 'CREDIT' || dir === 'CR') creditVal = parsedAmt;
+      else debitVal = parsedAmt;
+    }
+
+    if (isNaN(debitVal) || isNaN(creditVal) || debitVal < 0 || creditVal < 0) {
+      rejectedRows.push({ row: idx + 2, reason: 'Non-numeric or negative debit/credit' });
+      return;
+    }
+
+    const rawBal = findVal(['balance', 'bal']);
+    const balVal = rawBal !== null ? parseStrictNumber(rawBal, false) : undefined;
+    if (rawBal !== null && String(rawBal).trim() !== '' && isNaN(balVal)) {
+      rejectedRows.push({ row: idx + 2, reason: `Invalid balance "${rawBal}"` });
+      return;
+    }
+
+    const accVal = String(findVal(['account_no', 'account_number', 'account', 'acc_no'], ['counterparty', 'beneficiary']) || targetAccount || '').trim();
+    if (!accVal) {
+      rejectedRows.push({ row: idx + 2, reason: 'Missing account number (no Account column and no target account provided)' });
+      return;
+    }
+
+    const utrVal = String(findVal(['utr', 'reference', 'ref']) || '').trim();
+    const narrVal = String(findVal(['narration', 'description', 'remarks']) || '').trim();
+    const cpAccVal = String(findVal(['counterparty_account', 'beneficiary_account']) || '').trim();
+    const cpNameVal = String(findVal(['counterparty_name', 'beneficiary_name', 'counterparty', 'beneficiary']) || narrVal || '').trim();
+    const txnIdVal = String(findVal(['transaction_id', 'txn_id']) || `TXN-XLS-${idx + 1}`).trim();
 
     results.push({
-      id: `TXN-XLS-${Date.now()}-${idx+1}`,
-      date: String(dateVal),
-      time: String(timeVal),
-      timestamp: `${String(dateVal)}T${String(timeVal)}+05:30`,
-      bank: filename.includes('axis') ? 'Axis Bank' : 'Banking Entity',
-      account: String(accVal),
-      holder: 'Account Holder',
+      id: txnIdVal,
+      date: dateVal,
+      time: timeVal,
+      timestamp: `${dateVal}T${timeVal}+05:30`,
+      bank: 'Uploaded Workbook',
+      account: accVal,
+      holder: 'Statement Account Holder',
       direction: creditVal > 0 ? 'CREDIT' : 'DEBIT',
       debit: debitVal,
       credit: creditVal,
       amount: creditVal > 0 ? creditVal : debitVal,
       balance: balVal,
-      counterpartyAccount: 'DEST_ACC',
-      counterpartyName: String(descVal),
-      utr: String(utrVal),
-      narration: String(descVal),
+      counterpartyAccount: cpAccVal,
+      counterpartyName: cpNameVal,
+      utr: utrVal,
+      narration: narrVal,
       sourceFile: filename,
       row: idx + 2,
       flag: creditVal > 0 ? 'XLS_CREDIT' : 'XLS_DEBIT'
     });
   });
-  return results;
+
+  return { transactions: results, rejectedRows, errors: [] };
 }
 
-async function parsePDFStatement(arrayBuffer, filename) {
+async function parsePDFStatement(arrayBuffer, filename = '', options = {}) {
   try {
-    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
-    let fullText = "";
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(arrayBuffer),
+      password: options.password || undefined
+    });
+    const pdf = await loadingTask.promise;
+
+    let lines = [];
     for (let p = 1; p <= pdf.numPages; p++) {
       const page = await pdf.getPage(p);
       const textContent = await page.getTextContent();
-      const pageText = textContent.items.map(item => item.str).join(' ');
-      fullText += pageText + "\n";
-    }
-
-    // Parse lines looking for transaction tokens (date + amount)
-    let extracted = [];
-    const dateRegex = /(\d{2}[-/]\d{2}[-/]\d{4}|\d{4}[-/]\d{2}[-/]\d{2})/g;
-    const matches = fullText.match(dateRegex);
-
-    if (matches && matches.length > 0) {
-      matches.slice(0, 10).forEach((d, i) => {
-        extracted.push({
-          id: `TXN-PDF-${i+1}`,
-          date: d,
-          time: '11:00:00',
-          timestamp: `${d}T11:00:00+05:30`,
-          bank: 'PDF Detected Bank',
-          account: '9182736450',
-          direction: 'CREDIT',
-          debit: 0,
-          credit: 10000 * (i + 1),
-          amount: 10000 * (i + 1),
-          balance: 50000,
-          counterpartyAccount: 'PDF_COUNTERPARTY',
-          counterpartyName: 'Extracted PDF Beneficiary',
-          utr: `UTR-PDF-89${i}102`,
-          narration: 'PDF Statement Entry',
-          sourceFile: filename,
-          row: i + 1,
-          flag: 'PDF_EXTRACTED'
-        });
+      // Reconstruct genuine horizontal table lines by grouping items by Y coordinate
+      const yBuckets = [];
+      for (const item of textContent.items) {
+        const txt = (item.str || '').trim();
+        if (!txt) continue;
+        const x = item.transform ? item.transform[4] : 0;
+        const y = item.transform ? item.transform[5] : 0;
+        let bucket = yBuckets.find(b => Math.abs(b.y - y) <= 3.5);
+        if (!bucket) {
+          bucket = { y, items: [] };
+          yBuckets.push(bucket);
+        }
+        bucket.items.push({ x, str: txt });
+      }
+      // Sort top-to-bottom (higher Y first in PDF coordinates), then left-to-right
+      yBuckets.sort((a, b) => b.y - a.y);
+      yBuckets.forEach(b => {
+        b.items.sort((i1, i2) => i1.x - i2.x);
+        lines.push(b.items.map(i => i.str).join(' '));
       });
     }
-    return extracted;
+
+    if (lines.length === 0) {
+      return {
+        transactions: [],
+        rejectedRows: [],
+        errors: ['No extractable text found in PDF. Scanned/image-only PDFs are unsupported without OCR.']
+      };
+    }
+
+    // Detect statement Account Number from PDF header text if present
+    let detectedAccount = (options.targetAccount || '').trim();
+    for (const line of lines.slice(0, 25)) {
+      const accMatch = line.match(/(?:Account\s*(?:No|Number|#)|A\/c\s*No\.?)\s*[:\-]?\s*([A-Za-z0-9]{6,20})/i);
+      if (accMatch && !detectedAccount) {
+        detectedAccount = accMatch[1];
+        break;
+      }
+    }
+
+    let extracted = [];
+    let rejectedRows = [];
+    const datePrefixRegex = /^(\d{2}[-/]\d{2}[-/]\d{4}|\d{4}[-/]\d{2}[-/]\d{2})\b/;
+
+    lines.forEach((line, idx) => {
+      const dateMatch = line.match(datePrefixRegex);
+      if (!dateMatch) return;
+
+      const dateVal = normalizeDateString(dateMatch[1]);
+      if (!dateVal) {
+        rejectedRows.push({ row: idx + 1, reason: `Unparseable date in PDF line: ${line.slice(0, 60)}` });
+        return;
+      }
+
+      if (!detectedAccount) {
+        rejectedRows.push({ row: idx + 1, reason: 'Missing Account Number in PDF header and no target account provided.' });
+        return;
+      }
+
+      const timeMatch = line.match(/\b(\d{2}:\d{2}(?::\d{2})?)\b/);
+      const timeVal = timeMatch ? (timeMatch[1].length === 5 ? timeMatch[1] + ':00' : timeMatch[1]) : '00:00:00';
+
+      // Extract UTR / reference token if present
+      const utrMatch = line.match(/\b(UTR[-A-Za-z0-9]+|IMPS\/\d+|NEFT\/\w+|RTGS\/\w+|REF[-A-Za-z0-9]+)\b/i);
+      const utrVal = utrMatch ? utrMatch[1] : '';
+
+      // Extract numeric currency amounts (supports 1,00,000.00, 50000.0, or 50000)
+      const numTokens = [];
+      const numRegex = /(?:^|\s)([\d,]+\.\d{1,2}|\d{3,}(?:,\d{2,3})*)(?=\s|$)/g;
+      let m;
+      while ((m = numRegex.exec(line)) !== null) {
+        const val = parseFloat(m[1].replace(/,/g, ''));
+        if (!isNaN(val)) numTokens.push(val);
+      }
+
+      if (numTokens.length === 0) {
+        rejectedRows.push({ row: idx + 1, reason: `No valid monetary amounts extracted from PDF line: ${line.slice(0, 60)}` });
+        return;
+      }
+
+      const isCredit = /\b(CR|CREDIT|DEPOSIT)\b/i.test(line);
+      const isDebit = /\b(DR|DEBIT|WITHDRAWAL)\b/i.test(line);
+
+      let debitVal = 0, creditVal = 0, balVal = undefined;
+      if (numTokens.length >= 3) {
+        // Common bank statement column format: Debit Credit Balance
+        debitVal = numTokens[numTokens.length - 3];
+        creditVal = numTokens[numTokens.length - 2];
+        balVal = numTokens[numTokens.length - 1];
+      } else if (numTokens.length === 2) {
+        // Amount + Running Balance
+        const txnAmt = numTokens[0];
+        balVal = numTokens[1];
+        if (isCredit && !isDebit) creditVal = txnAmt;
+        else debitVal = txnAmt;
+      } else {
+        const txnAmt = numTokens[0];
+        if (isCredit && !isDebit) creditVal = txnAmt;
+        else debitVal = txnAmt;
+      }
+
+      if (debitVal === 0 && creditVal === 0) {
+        rejectedRows.push({ row: idx + 1, reason: `Zero transaction amount in PDF line: ${line.slice(0, 60)}` });
+        return;
+      }
+
+      const direction = creditVal > 0 ? 'CREDIT' : 'DEBIT';
+      const narration = line
+        .replace(datePrefixRegex, '')
+        .replace(timeMatch ? timeMatch[0] : '', '')
+        .trim();
+
+      extracted.push({
+        id: `TXN-PDF-${extracted.length + 1}`,
+        date: dateVal,
+        time: timeVal,
+        timestamp: `${dateVal}T${timeVal}+05:30`,
+        bank: 'PDF Statement Bank',
+        account: detectedAccount,
+        holder: 'Statement Account Holder',
+        direction: direction,
+        debit: debitVal,
+        credit: creditVal,
+        amount: creditVal > 0 ? creditVal : debitVal,
+        balance: balVal,
+        counterpartyAccount: '',
+        counterpartyName: narration.slice(0, 60),
+        utr: utrVal,
+        narration: narration,
+        sourceFile: filename,
+        row: idx + 1,
+        flag: creditVal > 0 ? 'PDF_CREDIT' : 'PDF_DEBIT'
+      });
+    });
+
+    if (extracted.length === 0) {
+      return {
+        transactions: [],
+        rejectedRows,
+        errors: ['Unsupported PDF layout or no valid bank-statement transaction rows found.']
+      };
+    }
+
+    return { transactions: extracted, rejectedRows, errors: [] };
   } catch (e) {
     console.warn("PDF parsing failed:", e);
-    return [];
+    return { transactions: [], rejectedRows: [], errors: [`PDF parse error: ${e.message}`] };
   }
 }
 
@@ -1606,19 +2236,19 @@ function renderIngestedTransactionsView() {
   const tbody = document.getElementById('ingestedTxnTbody');
   if (!tbody) return;
 
-  const currentCaseTxns = MuleNetState.transactions.filter(t => t.caseId === MuleNetState.currentCaseId || !t.caseId);
+  const currentCaseTxns = MuleNetState.transactions.filter(t => t.caseId === MuleNetState.currentCaseId);
   const badge = document.getElementById('ingestedCountBadge');
   if (badge) badge.innerText = `${currentCaseTxns.length} TRANSACTIONS`;
 
   tbody.innerHTML = currentCaseTxns.map(t => `
     <tr class="hover:bg-surface-container-low transition-colors ${t.flag === 'RECONCILIATION_EXCEPTION' ? 'bg-red-50 text-red-900 font-bold' : ''}">
-      <td class="py-1 px-2 font-bold">${t.id} <span class="text-[9px] text-slate-500 font-normal">(${t.date})</span></td>
-      <td class="py-1 px-2 text-[10px]">${t.bank} (${t.account.substring(0,6)}...)</td>
-      <td class="py-1 px-2 text-[10px]">${t.counterpartyName}</td>
-      <td class="py-1 px-2 text-secondary text-[10px] font-bold">${t.utr}</td>
+      <td class="py-1 px-2 font-bold">${escapeHTML(t.id)} <span class="text-[9px] text-slate-500 font-normal">(${escapeHTML(t.date)})</span></td>
+      <td class="py-1 px-2 text-[10px]">${escapeHTML(t.bank)} (${escapeHTML((t.account || '').substring(0,6))}...)</td>
+      <td class="py-1 px-2 text-[10px]">${escapeHTML(t.counterpartyName)}</td>
+      <td class="py-1 px-2 text-secondary text-[10px] font-bold">${escapeHTML(t.utr || 'N/A')}</td>
       <td class="py-1 px-2 text-right ${t.debit > 0 ? 'text-error font-bold' : 'text-slate-400'}">${t.debit > 0 ? '₹' + t.debit.toLocaleString('en-IN') : '-'}</td>
       <td class="py-1 px-2 text-right ${t.credit > 0 ? 'text-emerald-700 font-bold' : 'text-slate-400'}">${t.credit > 0 ? '₹' + t.credit.toLocaleString('en-IN') : '-'}</td>
-      <td class="py-1 px-2 text-right font-bold">₹${t.balance.toLocaleString('en-IN')}</td>
+      <td class="py-1 px-2 text-right font-bold">${(t.balance !== undefined && t.balance !== null && !isNaN(t.balance)) ? '₹' + Number(t.balance).toLocaleString('en-IN') : '-'}</td>
       <td class="py-1 px-2 text-center">
         <span class="px-1 py-0.2 rounded text-[9px] font-bold ${t.flag === 'RECONCILIATION_EXCEPTION' ? 'bg-red-200 text-red-900' : 'bg-emerald-100 text-emerald-800'}">
           ${t.flag === 'RECONCILIATION_EXCEPTION' ? 'MISMATCH ⚠' : 'VERIFIED ✓'}
@@ -1632,22 +2262,22 @@ function renderTransactionExplorer() {
   const tbody = document.getElementById('fullTxnTbody');
   if (!tbody) return;
 
-  const currentCaseTxns = MuleNetState.transactions.filter(t => t.caseId === MuleNetState.currentCaseId || !t.caseId);
+  const currentCaseTxns = MuleNetState.transactions.filter(t => t.caseId === MuleNetState.currentCaseId);
 
   tbody.innerHTML = currentCaseTxns.map(t => `
     <tr class="hover:bg-surface-container-low transition-colors">
-      <td class="py-1.5 px-2 font-bold text-secondary">${t.id}</td>
-      <td class="py-1.5 px-2 text-[10px]">${t.time} IST</td>
-      <td class="py-1.5 px-2 text-[10px]">${t.bank} • <span class="font-bold">${t.account}</span></td>
-      <td class="py-1.5 px-2 text-[10px] font-bold ${t.direction === 'DEBIT' ? 'text-error' : 'text-emerald-700'}">${t.direction}</td>
-      <td class="py-1.5 px-2 text-right font-bold ${t.direction === 'DEBIT' ? 'text-error' : 'text-emerald-700'}">₹${t.amount.toLocaleString('en-IN')}</td>
-      <td class="py-1.5 px-2 text-[10px]">${t.counterpartyName}</td>
-      <td class="py-1.5 px-2 text-[10px] text-secondary font-bold">${t.utr}</td>
+      <td class="py-1.5 px-2 font-bold text-secondary">${escapeHTML(t.id)}</td>
+      <td class="py-1.5 px-2 text-[10px]">${escapeHTML(t.time)} IST</td>
+      <td class="py-1.5 px-2 text-[10px]">${escapeHTML(t.bank)} • <span class="font-bold">${escapeHTML(t.account)}</span></td>
+      <td class="py-1.5 px-2 text-[10px] font-bold ${t.direction === 'DEBIT' ? 'text-error' : 'text-emerald-700'}">${escapeHTML(t.direction)}</td>
+      <td class="py-1.5 px-2 text-right font-bold ${t.direction === 'DEBIT' ? 'text-error' : 'text-emerald-700'}">₹${(t.amount || 0).toLocaleString('en-IN')}</td>
+      <td class="py-1.5 px-2 text-[10px]">${escapeHTML(t.counterpartyName)}</td>
+      <td class="py-1.5 px-2 text-[10px] text-secondary font-bold">${escapeHTML(t.utr || 'N/A')}</td>
       <td class="py-1.5 px-2 text-[9px]">
-        <span class="px-1 py-0.2 rounded bg-surface-container text-on-surface-variant font-bold">${t.flag}</span>
+        <span class="px-1 py-0.2 rounded bg-surface-container text-on-surface-variant font-bold">${escapeHTML(t.flag)}</span>
       </td>
       <td class="py-1.5 px-2 text-center">
-        <button onclick="showTransactionEvidenceDetails('${t.id}')" class="px-1.5 py-0.5 bg-surface-container hover:bg-secondary hover:text-white rounded text-[9px]">Details</button>
+        <button onclick="showTransactionEvidenceDetails('${escapeHTML(t.id)}')" class="px-1.5 py-0.5 bg-surface-container hover:bg-secondary hover:text-white rounded text-[9px]">Details</button>
       </td>
     </tr>
   `).join('');
@@ -1816,41 +2446,174 @@ function sortPriorityTable(criteria) {
 
 // -------------------------------------------------------------
 // GENUINE PASSIVE INFRASTRUCTURE ENRICHMENT (Domain & IP)
+// Live DoH + RDAP + crt.sh + ipwho.is; NEVER falls back to unrelated records
 // -------------------------------------------------------------
+async function fetchWithTimeout(url, timeoutMs = 3500) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, { mode: 'cors', signal: controller.signal });
+    clearTimeout(timer);
+    return resp;
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
 async function performInfraLookup() {
   const query = (document.getElementById('infraLookupInput')?.value || '').trim();
   if (!query) return;
 
-  showToast("Passive Reconnaissance", "Performing passive DNS/RDAP query for: " + query, "info");
+  showToast("Passive Reconnaissance", "Querying DNS/RDAP/CT for: " + query, "info");
 
-  let isLive = false;
-  let resultData = null;
+  const isIPv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(query);
+  const isIPv6 = query.includes(':') && /^[0-9a-fA-F:]+$/.test(query);
+  const isIP = isIPv4 || isIPv6;
 
-  // Try live passive DNS over HTTPS if domain
-  if (query.includes('.') && !query.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+  let liveData = {
+    domain: isIP ? 'N/A (Direct IP Query)' : query,
+    ip: isIP ? query : 'Unresolved',
+    ipv6: 'None / Unresolved',
+    registrar: 'Unavailable',
+    creationDate: 'Unavailable',
+    expiryDate: 'Unavailable',
+    status: 'Unknown',
+    asn: 'Unavailable',
+    isp: 'Unavailable',
+    country: 'Unavailable',
+    sslIssuer: 'Unavailable',
+    sslValidUntil: 'N/A',
+    subdomains: [],
+    nameservers: [],
+    sources: {},
+    linkedCase: 'None in Active Registry',
+    linkedAccount: 'None'
+  };
+
+  let anyLiveSuccess = false;
+
+  if (!isIP && query.includes('.')) {
+    // 1. Google DoH A, AAAA, NS
     try {
-      const resp = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(query)}&type=A`, { mode: 'cors' });
-      if (resp.ok) {
-        const json = await resp.json();
-        if (json.Answer) {
-          isLive = true;
-          resultData = {
-            domain: query,
-            ip: json.Answer[0].data,
-            source: "Live Google Public DNS over HTTPS",
-            status: "active"
-          };
+      const [aResp, aaaaResp, nsResp] = await Promise.allSettled([
+        fetchWithTimeout(`https://dns.google/resolve?name=${encodeURIComponent(query)}&type=A`),
+        fetchWithTimeout(`https://dns.google/resolve?name=${encodeURIComponent(query)}&type=AAAA`),
+        fetchWithTimeout(`https://dns.google/resolve?name=${encodeURIComponent(query)}&type=NS`)
+      ]);
+
+      if (aResp.status === 'fulfilled' && aResp.value.ok) {
+        const aJson = await aResp.value.json();
+        if (aJson.Answer && aJson.Answer.length > 0) {
+          const aRec = aJson.Answer.find(a => a.type === 1) || aJson.Answer[0];
+          liveData.ip = aRec.data;
+          liveData.status = 'ACTIVE (DNS A Record)';
+          liveData.sources.dns = 'Google DoH';
+          anyLiveSuccess = true;
+        } else if (aJson.Status === 3) {
+          liveData.status = 'NXDOMAIN (Non-Existent Domain)';
+          liveData.sources.dns = 'Google DoH';
         }
       }
-    } catch (e) {
-      console.warn("Live DNS query restricted by CORS/network, using cached forensic fixture:", e);
-    }
+      if (aaaaResp.status === 'fulfilled' && aaaaResp.value.ok) {
+        const aaaaJson = await aaaaResp.value.json();
+        if (aaaaJson.Answer && aaaaJson.Answer.length > 0) {
+          liveData.ipv6 = aaaaJson.Answer[0].data;
+          anyLiveSuccess = true;
+        }
+      }
+      if (nsResp.status === 'fulfilled' && nsResp.value.ok) {
+        const nsJson = await nsResp.value.json();
+        if (nsJson.Answer) {
+          liveData.nameservers = nsJson.Answer.map(r => r.data);
+          anyLiveSuccess = true;
+        }
+      }
+    } catch (e) {}
+
+    // 2. RDAP Domain Lookup
+    try {
+      const rdapResp = await fetchWithTimeout(`https://rdap.org/domain/${encodeURIComponent(query)}`);
+      if (rdapResp.ok) {
+        const rdap = await rdapResp.json();
+        anyLiveSuccess = true;
+        liveData.sources.rdap = 'rdap.org';
+        if (rdap.status) liveData.status = rdap.status.join(', ');
+        if (rdap.events) {
+          const regEv = rdap.events.find(e => e.eventAction === 'registration');
+          const expEv = rdap.events.find(e => e.eventAction === 'expiration');
+          if (regEv) liveData.creationDate = regEv.eventDate.split('T')[0];
+          if (expEv) liveData.expiryDate = expEv.eventDate.split('T')[0];
+        }
+        if (rdap.entities) {
+          const registrarEnt = rdap.entities.find(e => e.roles && e.roles.includes('registrar'));
+          if (registrarEnt && registrarEnt.vcardArray && registrarEnt.vcardArray[1]) {
+            const fnField = registrarEnt.vcardArray[1].find(v => v[0] === 'fn');
+            if (fnField) liveData.registrar = fnField[3];
+          }
+        }
+      }
+    } catch (e) {}
+
+    // 3. Certificate Transparency (crt.sh)
+    try {
+      const ctResp = await fetchWithTimeout(`https://crt.sh/?q=${encodeURIComponent(query)}&output=json`, 3000);
+      if (ctResp.ok) {
+        const ctJson = await ctResp.json();
+        if (Array.isArray(ctJson) && ctJson.length > 0) {
+          anyLiveSuccess = true;
+          liveData.sources.ct = 'crt.sh';
+          liveData.sslIssuer = ctJson[0].issuer_name || 'CT Logged Certificate';
+          liveData.sslValidUntil = (ctJson[0].not_after || '').split('T')[0] || 'N/A';
+          const subs = new Set();
+          ctJson.slice(0, 15).forEach(entry => {
+            if (entry.name_value) entry.name_value.split('\n').forEach(s => subs.add(s.trim()));
+          });
+          liveData.subdomains = Array.from(subs).slice(0, 6);
+        }
+      }
+    } catch (e) {}
   }
 
-  // Fallback to cached fixture if live request unavailable
-  const cached = MuleNetState.infrastructure.find(i => i.domain === query || i.ip === query) || MuleNetState.infrastructure[0];
-  displayEnrichedInfra(cached, isLive);
-  logAuditAction('INFRA_LOOKUP', `Passive intelligence retrieved for ${query} (${isLive ? 'LIVE' : 'CACHED FIXTURE'}).`);
+  // 4. IP Intelligence (RDAP IP / ipwho.is)
+  const targetIp = isIP ? query : (liveData.ip !== 'Unresolved' ? liveData.ip : null);
+  if (targetIp) {
+    try {
+      const ipResp = await fetchWithTimeout(`https://ipwho.is/${encodeURIComponent(targetIp)}`);
+      if (ipResp.ok) {
+        const ipJson = await ipResp.json();
+        if (ipJson.success !== false) {
+          anyLiveSuccess = true;
+          liveData.sources.ip = 'ipwho.is';
+          if (ipJson.connection) {
+            liveData.asn = ipJson.connection.asn ? `AS${ipJson.connection.asn}` : 'Unavailable';
+            liveData.isp = ipJson.connection.isp || ipJson.connection.org || 'Unavailable';
+          }
+          liveData.country = [ipJson.city, ipJson.country].filter(Boolean).join(', ') || 'Unavailable';
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Check exact case/fixture match ONLY (never fall back to unrelated infrastructure[0])
+  const exactCached = MuleNetState.infrastructure.find(
+    i => i.domain.toLowerCase() === query.toLowerCase() || i.ip === query
+  );
+
+  if (anyLiveSuccess) {
+    if (exactCached) {
+      liveData.linkedCase = exactCached.linkedCase;
+      liveData.linkedAccount = exactCached.linkedAccount;
+    }
+    displayEnrichedInfra(liveData, 'LIVE');
+    logAuditAction('INFRA_LOOKUP', `Live OSINT lookup succeeded for ${query} (Sources: ${Object.values(liveData.sources).join(', ') || 'Live'}).`);
+  } else if (exactCached) {
+    displayEnrichedInfra(exactCached, 'CACHED_EXACT');
+    logAuditAction('INFRA_LOOKUP', `Offline/CORS fallback used exact cached OSINT record for ${query}.`);
+  } else {
+    displayEnrichedInfra({ query, status: liveData.status }, 'NONE');
+    logAuditAction('INFRA_LOOKUP', `No live or cached intelligence found for ${query}.`);
+  }
 }
 
 function lookupInfraDemo(domainOrIp) {
@@ -1859,39 +2622,61 @@ function lookupInfraDemo(domainOrIp) {
   performInfraLookup();
 }
 
-function displayEnrichedInfra(infra, isLive) {
+function displayEnrichedInfra(infra, mode = 'CACHED_EXACT') {
   const details = document.getElementById('infraDetailsContainer');
   const chain = document.getElementById('infraChainVisual');
+
+  if (mode === 'NONE' || !infra) {
+    const q = escapeHTML(infra ? infra.query : 'Unknown');
+    if (details) {
+      details.innerHTML = `
+        <div class="p-4 bg-slate-50 border border-slate-300 rounded text-center space-y-1.5">
+          <div class="font-bold text-slate-800 text-[13px]">No Live Data Found for "${q}"</div>
+          <div class="text-[11px] font-mono text-slate-600">Status: ${escapeHTML(infra && infra.status ? infra.status : 'Offline / Lookup Unavailable')}</div>
+          <div class="text-[10px] text-slate-500">No unrelated cached fixture was substituted. Verify network connectivity or query a known case indicator.</div>
+        </div>
+      `;
+    }
+    if (chain) {
+      chain.innerHTML = `<div class="p-3 text-center text-[11px] font-mono text-slate-500">No resolution chain available for "${q}".</div>`;
+    }
+    return;
+  }
+
+  const badgeHtml = mode === 'LIVE'
+    ? `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-mono font-bold rounded">SOURCE: LIVE OSINT (${escapeHTML(Object.values(infra.sources || {}).join(' + ') || 'DoH/RDAP')})</span>`
+    : `<span class="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-mono font-bold rounded">SOURCE: CACHED OSINT RECORD (OFFLINE FALLBACK)</span>`;
+
+  const subs = Array.isArray(infra.subdomains) && infra.subdomains.length > 0 ? infra.subdomains.map(escapeHTML).join(', ') : 'None observed';
+  const nsList = Array.isArray(infra.nameservers) && infra.nameservers.length > 0 ? infra.nameservers.map(escapeHTML).join(', ') : 'Unavailable';
 
   if (details) {
     details.innerHTML = `
       <div class="flex items-center justify-between pb-2 border-b border-outline-variant mb-2">
         <div class="flex items-center gap-1.5">
           <span class="material-symbols-outlined text-secondary text-[20px]">public</span>
-          <span class="font-headline-sm text-[14px] font-bold text-on-surface">${infra.domain}</span>
+          <span class="font-headline-sm text-[14px] font-bold text-on-surface">${escapeHTML(infra.domain || infra.ip)}</span>
         </div>
-        <span class="px-2 py-0.5 ${isLive ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-900 border border-amber-300'} text-[10px] font-mono font-bold rounded">
-          ${isLive ? 'SOURCE: LIVE PASSIVE DNS (DoH)' : 'SOURCE: CACHED OSINT RECORD (OFFLINE FALLBACK)'}
-        </span>
+        ${badgeHtml}
       </div>
       <div class="grid grid-cols-2 gap-2 text-[11px] font-mono">
         <div class="p-2 bg-surface-container-low rounded border border-outline-variant space-y-1">
-          <div>Registrar: <strong>${infra.registrar}</strong></div>
-          <div>Created: <strong>${infra.creationDate}</strong></div>
-          <div>Expires: <strong>${infra.expiryDate}</strong></div>
-          <div>Domain Status: <strong class="text-error">${infra.status}</strong></div>
+          <div>Registrar [${escapeHTML((infra.sources && infra.sources.rdap) || (mode === 'LIVE' ? 'Unavailable' : 'Cached'))}]: <strong>${escapeHTML(infra.registrar)}</strong></div>
+          <div>Created: <strong>${escapeHTML(infra.creationDate)}</strong></div>
+          <div>Expires: <strong>${escapeHTML(infra.expiryDate)}</strong></div>
+          <div>Status: <strong class="text-error">${escapeHTML(infra.status)}</strong></div>
         </div>
         <div class="p-2 bg-surface-container-low rounded border border-outline-variant space-y-1">
-          <div>IP Address: <strong class="text-secondary">${infra.ip}</strong></div>
-          <div>ASN: <strong>${infra.asn}</strong></div>
-          <div>Hosting ISP: <strong>${infra.isp}</strong></div>
-          <div>Geolocation: <strong>${infra.country}</strong></div>
+          <div>IPv4 [${escapeHTML((infra.sources && infra.sources.dns) || (mode === 'LIVE' ? 'Direct/DoH' : 'Cached'))}]: <strong class="text-secondary">${escapeHTML(infra.ip)}</strong></div>
+          <div>IPv6: <strong>${escapeHTML(infra.ipv6 || 'None')}</strong></div>
+          <div>ASN [${escapeHTML((infra.sources && infra.sources.ip) || (mode === 'LIVE' ? 'Unavailable' : 'Cached'))}]: <strong>${escapeHTML(infra.asn)}</strong></div>
+          <div>ISP / Geo: <strong>${escapeHTML(infra.isp)} (${escapeHTML(infra.country)})</strong></div>
         </div>
       </div>
       <div class="mt-2 p-2 bg-surface-container-low rounded border border-outline-variant text-[11px] font-mono space-y-1">
-        <div>SSL Certificate: <strong>${infra.sslIssuer}</strong> (Valid until ${infra.sslValidUntil})</div>
-        <div>Subdomains Observed: <strong>${infra.subdomains.join(', ')}</strong></div>
-        <div class="text-secondary font-bold">Correlated Police FIR: ${infra.linkedCase} (Beneficiary Acc: ${infra.linkedAccount})</div>
+        <div>SSL/CT [${escapeHTML((infra.sources && infra.sources.ct) || (mode === 'LIVE' ? 'Unavailable' : 'Cached'))}]: <strong>${escapeHTML(infra.sslIssuer)}</strong> (Valid until ${escapeHTML(infra.sslValidUntil)})</div>
+        <div>Subdomains Observed: <strong>${subs}</strong></div>
+        <div class="text-secondary font-bold">Correlated Police FIR: ${escapeHTML(infra.linkedCase)} (Beneficiary Acc: ${escapeHTML(infra.linkedAccount)})</div>
       </div>
     `;
   }
@@ -1900,15 +2685,15 @@ function displayEnrichedInfra(infra, isLive) {
     chain.innerHTML = `
       <div class="p-2 bg-surface-container-low rounded border border-outline-variant space-y-2">
         <div class="flex items-center justify-between text-[11px] font-bold">
-          <span>Domain: ${infra.domain}</span>
-          <span class="px-1 bg-purple-100 text-purple-800 rounded text-[9px]">LAYER 1</span>
+          <span>Target: ${escapeHTML(infra.domain !== 'N/A (Direct IP Query)' ? infra.domain : infra.ip)}</span>
+          <span class="px-1 bg-purple-100 text-purple-800 rounded text-[9px]">${mode === 'LIVE' ? 'LIVE' : 'CACHED'}</span>
         </div>
         <div class="pl-3 border-l-2 border-secondary text-[10px] space-y-1">
-          <div>↓ DNS Authoritative NS: namecheaphosting.com</div>
-          <div>↓ A Record Resolution: <strong class="text-secondary font-mono">${infra.ip}</strong></div>
-          <div>↓ Autonomous System: <strong class="text-slate-800">${infra.asn}</strong></div>
-          <div>↓ Infrastructure Provider: <strong class="text-slate-800">${infra.isp}</strong></div>
-          <div>↓ Geolocation: <strong class="text-error">${infra.country}</strong></div>
+          <div>↓ Nameservers: <strong class="font-mono">${nsList}</strong></div>
+          <div>↓ A Record Resolution: <strong class="text-secondary font-mono">${escapeHTML(infra.ip)}</strong></div>
+          <div>↓ Autonomous System: <strong class="text-slate-800">${escapeHTML(infra.asn)}</strong></div>
+          <div>↓ Infrastructure Provider: <strong class="text-slate-800">${escapeHTML(infra.isp)}</strong></div>
+          <div>↓ Geolocation: <strong class="text-error">${escapeHTML(infra.country)}</strong></div>
         </div>
       </div>
     `;
@@ -1916,13 +2701,133 @@ function displayEnrichedInfra(infra, isLive) {
 }
 
 function renderInfrastructureView() {
-  const infra = MuleNetState.infrastructure[0];
-  displayEnrichedInfra(infra, false);
+  const curCase = MuleNetState.cases.find(c => c.caseId === MuleNetState.currentCaseId);
+  const caseInfra = curCase
+    ? MuleNetState.infrastructure.find(i => i.linkedCase && i.linkedCase.includes(curCase.caseId))
+    : null;
+  if (caseInfra) {
+    displayEnrichedInfra(caseInfra, 'CACHED_EXACT');
+  } else {
+    displayEnrichedInfra({ query: curCase ? curCase.firNo : 'Active Case', status: 'No digital infrastructure linked to this case.' }, 'NONE');
+  }
 }
 
 // -------------------------------------------------------------
-// DYNAMIC CROSS-CASE CORRELATOR
+// DYNAMIC CROSS-CASE CORRELATOR (Zero Hardcoded Matches, Review Workflow)
 // -------------------------------------------------------------
+function computeDynamicCrossCaseMatches(filterCaseId = null) {
+  let matches = [];
+  const cases = MuleNetState.cases || [];
+
+  // 1. Shared Bank Accounts across distinct cases (via actual transactions)
+  const accCasesMap = {};
+  MuleNetState.transactions.forEach(t => {
+    if (!t.caseId) return;
+    [t.account, t.counterpartyAccount].forEach(accNo => {
+      if (!accNo || accNo.startsWith('ATM') || accNo.startsWith('CHARGES') || accNo === 'EXTERNAL_DEST') return;
+      if (!accCasesMap[accNo]) accCasesMap[accNo] = new Set();
+      accCasesMap[accNo].add(t.caseId);
+    });
+  });
+
+  Object.keys(accCasesMap).forEach(accNo => {
+    const cIds = Array.from(accCasesMap[accNo]);
+    if (cIds.length > 1 && (!filterCaseId || cIds.includes(filterCaseId))) {
+      const accMeta = MuleNetState.accounts.find(a => a.accountNumber === accNo);
+      const firList = cIds.map(id => (cases.find(c => c.caseId === id) || {}).firNo || id);
+      const linkKey = `ACC:${accNo}`;
+      matches.push({
+        linkKey,
+        type: "Bank Account (Shared)",
+        identifier: accMeta ? `${accNo} (${accMeta.bank} - ${accMeta.holder})` : accNo,
+        cases: firList.join(' & '),
+        caseIds: cIds,
+        strength: "STRONG_IDENTIFIER",
+        evidence: `Observed in ledger transactions across ${cIds.length} FIRs`,
+        status: (MuleNetState.crossCaseStates && MuleNetState.crossCaseStates[linkKey]) || "PENDING_REVIEW"
+      });
+    }
+  });
+
+  // 2. Shared UTRs across distinct cases
+  const utrCasesMap = {};
+  MuleNetState.transactions.forEach(t => {
+    if (!t.caseId || !t.utr) return;
+    if (!utrCasesMap[t.utr]) utrCasesMap[t.utr] = new Set();
+    utrCasesMap[t.utr].add(t.caseId);
+  });
+  Object.keys(utrCasesMap).forEach(utr => {
+    const cIds = Array.from(utrCasesMap[utr]);
+    if (cIds.length > 1 && (!filterCaseId || cIds.includes(filterCaseId))) {
+      const firList = cIds.map(id => (cases.find(c => c.caseId === id) || {}).firNo || id);
+      const linkKey = `UTR:${utr}`;
+      matches.push({
+        linkKey,
+        type: "Transaction UTR",
+        identifier: utr,
+        cases: firList.join(' & '),
+        caseIds: cIds,
+        strength: "STRONG_IDENTIFIER",
+        evidence: `Identical UTR reference across ${cIds.length} case ledgers`,
+        status: (MuleNetState.crossCaseStates && MuleNetState.crossCaseStates[linkKey]) || "PENDING_REVIEW"
+      });
+    }
+  });
+
+  // 3. Shared Domains & IPs from actual infrastructure linkedCase lists
+  const ipCasesMap = {};
+  MuleNetState.infrastructure.forEach(inf => {
+    const linkedIds = cases.filter(c => inf.linkedCase && (inf.linkedCase.includes(c.caseId) || inf.linkedCase.includes(c.firNo))).map(c => c.caseId);
+    if (linkedIds.length > 1 && (!filterCaseId || linkedIds.includes(filterCaseId))) {
+      const firList = linkedIds.map(id => (cases.find(c => c.caseId === id) || {}).firNo || id);
+      const linkKey = `DOM:${inf.domain}`;
+      matches.push({
+        linkKey,
+        type: "Phishing Domain",
+        identifier: inf.domain,
+        cases: firList.join(' & '),
+        caseIds: linkedIds,
+        strength: "DIRECT_INFRA",
+        evidence: `Domain linked across ${linkedIds.length} FIR dossiers`,
+        status: (MuleNetState.crossCaseStates && MuleNetState.crossCaseStates[linkKey]) || "PENDING_REVIEW"
+      });
+    }
+    if (inf.ip && inf.ip !== 'Unresolved') {
+      if (!ipCasesMap[inf.ip]) ipCasesMap[inf.ip] = { cases: new Set(), asn: inf.asn };
+      linkedIds.forEach(cid => ipCasesMap[inf.ip].cases.add(cid));
+    }
+  });
+
+  Object.keys(ipCasesMap).forEach(ip => {
+    const cIds = Array.from(ipCasesMap[ip].cases);
+    if (cIds.length > 1 && (!filterCaseId || cIds.includes(filterCaseId))) {
+      const firList = cIds.map(id => (cases.find(c => c.caseId === id) || {}).firNo || id);
+      const linkKey = `IP:${ip}`;
+      matches.push({
+        linkKey,
+        type: "Server IP / Proxy",
+        identifier: `${ip} (${ipCasesMap[ip].asn || 'ASN'})`,
+        cases: firList.join(' & '),
+        caseIds: cIds,
+        strength: "CONTEXTUAL",
+        evidence: `Shared hosting IP across ${cIds.length} investigations`,
+        status: (MuleNetState.crossCaseStates && MuleNetState.crossCaseStates[linkKey]) || "PENDING_REVIEW"
+      });
+    }
+  });
+
+  return matches;
+}
+
+function setCrossCaseStatus(linkKey, status) {
+  if (!MuleNetState.crossCaseStates) MuleNetState.crossCaseStates = {};
+  MuleNetState.crossCaseStates[linkKey] = status;
+  saveToLocalStorage();
+  renderCrossCaseTable();
+  showToast("Correlation Updated", `Relationship ${linkKey} marked as ${status}.`, "info");
+  logAuditAction('CROSS_CASE_REVIEW', `Officer updated correlation ${linkKey} to ${status}.`);
+}
+
 function runCrossCaseCorrelationScan() {
   showToast("Scanning Syndicate Links", "Correlating entities across all stored police FIRs...", "info");
   renderCrossCaseTable();
@@ -1931,75 +2836,53 @@ function runCrossCaseCorrelationScan() {
 
 function renderCrossCaseTable() {
   const tbody = document.getElementById('crossCaseTbody');
+  const cardsContainer = document.getElementById('crossCaseCardsContainer');
+  const dynamicMatches = computeDynamicCrossCaseMatches();
+
+  if (cardsContainer) {
+    cardsContainer.innerHTML = dynamicMatches.slice(0, 3).map(m => `
+      <div class="bg-surface-container-lowest rounded-lg p-3 shadow-sm border border-outline-variant border-l-4 ${m.strength === 'STRONG_IDENTIFIER' ? 'border-error' : (m.strength === 'DIRECT_INFRA' ? 'border-amber-500' : 'border-purple-500')}">
+        <div class="font-label-caps text-[10px] font-bold ${m.strength === 'STRONG_IDENTIFIER' ? 'text-error' : 'text-amber-600'}">${escapeHTML(m.type)} (${escapeHTML(m.strength)})</div>
+        <div class="font-mono text-[13px] font-bold text-on-surface mt-1">${escapeHTML(m.identifier)}</div>
+        <div class="text-[11px] text-on-surface-variant mt-0.5">Linked: <strong class="text-on-surface">${escapeHTML(m.cases)}</strong></div>
+        <div class="mt-2 text-[10px] font-mono text-secondary">Status: ${escapeHTML(m.status)}</div>
+      </div>
+    `).join('') || `<div class="col-span-3 p-3 text-center text-slate-500 font-mono text-[11px]">No cross-case correlations detected across current case datasets.</div>`;
+  }
+
   if (!tbody) return;
 
-  // Dynamically compute shared entities across stored cases
-  let dynamicMatches = [];
-  const currentCase = MuleNetState.cases.find(c => c.caseId === MuleNetState.currentCaseId) || MuleNetState.cases[0];
-  const otherCases = MuleNetState.cases.filter(c => c.caseId !== MuleNetState.currentCaseId);
+  if (dynamicMatches.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="py-4 text-center text-slate-500 font-mono">No cross-case entity overlaps found in current dataset.</td></tr>`;
+    return;
+  }
 
-  // Check accounts
-  MuleNetState.accounts.forEach(acc => {
-    let linkedCases = [currentCase.firNo];
-    otherCases.forEach(oc => {
-      const hasTxn = MuleNetState.transactions.some(t => t.caseId === oc.caseId && (t.account === acc.accountNumber || t.counterpartyAccount === acc.accountNumber));
-      if (hasTxn || (acc.accountNumber === '1192837465' && oc.caseId === 'FIR-072-2024') || (acc.accountNumber === '8829103948' && oc.caseId === 'FIR-119-2024')) {
-        linkedCases.push(oc.firNo);
-      }
-    });
+  tbody.innerHTML = dynamicMatches.map(m => {
+    const statusBadge = m.status === 'VERIFIED'
+      ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">VERIFIED ✓</span>`
+      : (m.status === 'DISMISSED'
+        ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-600">DISMISSED</span>`
+        : `<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300">PENDING REVIEW</span>`);
 
-    if (linkedCases.length > 1) {
-      dynamicMatches.push({
-        type: "Bank Account (Mule)",
-        identifier: `${acc.accountNumber} (${acc.bank} - ${acc.holder})`,
-        cases: linkedCases.join(' & '),
-        strength: "STRONG_IDENTIFIER",
-        evidence: "Exact account number and beneficiary IFSC match",
-        status: "VERIFIED_SYNDICATE"
-      });
-    }
-  });
-
-  // Check domains
-  MuleNetState.infrastructure.forEach(inf => {
-    if (inf.linkedCase && inf.linkedCase.includes('&')) {
-      dynamicMatches.push({
-        type: "Phishing Domain",
-        identifier: inf.domain,
-        cases: inf.linkedCase,
-        strength: "DIRECT_INFRA",
-        evidence: "Identical domain used for victim credential harvest",
-        status: "VERIFIED_SYNDICATE"
-      });
-    }
-  });
-
-  // Check IP / Tor Node
-  dynamicMatches.push({
-    type: "Server IP / Tor Node",
-    identifier: "185.220.101.45 (AS9009 M247 Ltd)",
-    cases: "FIR 104/2024 (Jaipur South) & FIR 119/2024 (Kota)",
-    strength: "CONTEXTUAL",
-    evidence: "Shared bulletproof hosting origin across extortion campaigns",
-    status: "UNDER_REVIEW"
-  });
-
-  tbody.innerHTML = dynamicMatches.map(m => `
-    <tr class="hover:bg-surface-container-low transition-colors">
-      <td class="py-1.5 px-2 font-bold">${m.type}</td>
-      <td class="py-1.5 px-2 text-secondary font-bold text-[11px]">${m.identifier}</td>
-      <td class="py-1.5 px-2 text-[10px] font-semibold">${m.cases}</td>
-      <td class="py-1.5 px-2 text-center">
-        <span class="px-1.5 py-0.2 rounded text-[9px] font-bold ${m.strength === 'STRONG_IDENTIFIER' ? 'bg-red-600 text-white' : (m.strength === 'DIRECT_INFRA' ? 'bg-amber-500 text-white' : 'bg-purple-600 text-white')}">
-          ${m.strength}
-        </span>
-      </td>
-      <td class="py-1.5 px-2 text-[10px] text-slate-700">${m.evidence}</td>
-      <td class="py-1.5 px-2 text-center">
-        <span class="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">VERIFIED ✓</span>
-      </td>
-    </tr>
-  `).join('');
+    return `
+      <tr class="hover:bg-surface-container-low transition-colors">
+        <td class="py-1.5 px-2 font-bold">${escapeHTML(m.type)}</td>
+        <td class="py-1.5 px-2 text-secondary font-bold text-[11px]">${escapeHTML(m.identifier)}</td>
+        <td class="py-1.5 px-2 text-[10px] font-semibold">${escapeHTML(m.cases)}</td>
+        <td class="py-1.5 px-2 text-center">
+          <span class="px-1.5 py-0.2 rounded text-[9px] font-bold ${m.strength === 'STRONG_IDENTIFIER' ? 'bg-red-600 text-white' : (m.strength === 'DIRECT_INFRA' ? 'bg-amber-500 text-white' : 'bg-purple-600 text-white')}">
+            ${escapeHTML(m.strength)}
+          </span>
+        </td>
+        <td class="py-1.5 px-2 text-[10px] text-slate-700">${escapeHTML(m.evidence)}</td>
+        <td class="py-1.5 px-2 text-center space-x-1">
+          ${statusBadge}
+          <button onclick="setCrossCaseStatus('${escapeHTML(m.linkKey)}', 'VERIFIED')" class="px-1.5 py-0.5 bg-emerald-600 text-white rounded text-[9px] hover:bg-emerald-700">Verify</button>
+          <button onclick="setCrossCaseStatus('${escapeHTML(m.linkKey)}', 'DISMISSED')" class="px-1.5 py-0.5 bg-slate-400 text-white rounded text-[9px] hover:bg-slate-500">Dismiss</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function renderTimelineView() {
@@ -2064,61 +2947,110 @@ function filterTimelineEvents(filter) {
 
 function renderEvidenceView() {
   const tbody = document.getElementById('evidenceTableTbody');
-  if (!tbody) return;
+  const activeCaseId = MuleNetState.currentCaseId;
+  const caseEvidence = MuleNetState.evidenceFiles.filter(ev => ev.caseId === activeCaseId);
 
-  tbody.innerHTML = MuleNetState.evidenceFiles.map(ev => `
-    <tr class="hover:bg-surface-container-low transition-colors">
-      <td class="py-1.5 px-2 font-bold">${ev.id}</td>
-      <td class="py-1.5 px-2 text-secondary font-bold">${ev.filename}</td>
-      <td class="py-1.5 px-2 text-[10px]">${ev.type}</td>
-      <td class="py-1.5 px-2 text-[10px]">${ev.uploadTime}</td>
-      <td class="py-1.5 px-2 font-mono text-[9px] text-slate-700">${ev.sha256}</td>
-      <td class="py-1.5 px-2 text-center">
-        <span class="px-1.5 py-0.2 rounded text-[9px] font-bold ${ev.status === 'RECONCILED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
-          ${ev.status}
-        </span>
-      </td>
-      <td class="py-1.5 px-2 text-center">
-        <button onclick="verifySingleHash('${ev.id}')" class="px-1.5 py-0.5 bg-surface-container hover:bg-secondary hover:text-white rounded text-[9px]">Verify</button>
-      </td>
-    </tr>
-  `).join('');
+  if (tbody) {
+    tbody.innerHTML = caseEvidence.map(ev => {
+      const statusBadge = ev.status === 'RECONCILED'
+        ? 'bg-emerald-100 text-emerald-800'
+        : (ev.status === 'PARTIAL_REJECTED' ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800');
+      const intBadge = ev.integrityStatus === 'TAMPERED_MISMATCH'
+        ? '<span class="ml-1 px-1 py-0.2 rounded text-[8px] font-bold bg-red-600 text-white">TAMPERED ✗</span>'
+        : (ev.integrityStatus === 'VERIFIED'
+          ? '<span class="ml-1 px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-600 text-white">HASH MATCH ✓</span>'
+          : (ev.integrityStatus === 'NO_BYTES_STORED'
+            ? '<span class="ml-1 px-1 py-0.2 rounded text-[8px] font-bold bg-slate-200 text-slate-700">NO RAW BYTES</span>'
+            : ''));
+
+      return `
+        <tr class="hover:bg-surface-container-low transition-colors">
+          <td class="py-1.5 px-2 font-bold">${escapeHTML(ev.id)}</td>
+          <td class="py-1.5 px-2 text-secondary font-bold">${escapeHTML(ev.filename)}</td>
+          <td class="py-1.5 px-2 text-[10px]">${escapeHTML(ev.type)}</td>
+          <td class="py-1.5 px-2 text-[10px]">${escapeHTML(ev.uploadTime)}</td>
+          <td class="py-1.5 px-2 font-mono text-[9px] text-slate-700">${escapeHTML(ev.sha256)}</td>
+          <td class="py-1.5 px-2 text-center">
+            <span class="px-1.5 py-0.2 rounded text-[9px] font-bold ${statusBadge}">
+              ${escapeHTML(ev.status)}
+            </span>
+            ${intBadge}
+          </td>
+          <td class="py-1.5 px-2 text-center">
+            <button onclick="verifySingleHash('${escapeHTML(ev.id)}')" class="px-1.5 py-0.5 bg-surface-container hover:bg-secondary hover:text-white rounded text-[9px]">Verify</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
 
   const preview = document.getElementById('reportPreviewContainer');
   if (preview) {
-    const cur = MuleNetState.cases.find(c => c.caseId === MuleNetState.currentCaseId) || MuleNetState.cases[0];
+    const cur = MuleNetState.cases.find(c => c.caseId === activeCaseId) || MuleNetState.cases[0];
     const trace = traceMoneyTrailFromVictim(cur.victimUTR, MuleNetState.attributionMode);
     preview.innerHTML = `
       <div><strong>OFFICE OF THE SUPERINTENDENT OF POLICE, STATE CYBER CRIME, JAIPUR</strong></div>
-      <div>SPECIAL FINANCIAL CRIME INVESTIGATION REPORT // ${cur.firNo}</div>
-      <div>DATE OF COMPILATION: ${new Date().toLocaleDateString('en-GB')} • JURISDICTION: ${cur.policeStation}</div>
+      <div>SPECIAL FINANCIAL CRIME INVESTIGATION REPORT // ${escapeHTML(cur.firNo)}</div>
+      <div>DATE OF COMPILATION: ${new Date().toLocaleDateString('en-GB')} • JURISDICTION: ${escapeHTML(cur.policeStation)}</div>
       <div class="my-1 border-t border-outline-variant"></div>
-      <div>1. EXECUTIVE SUMMARY: Complainant ${cur.victimName} reported fraudulent inducement of ₹${cur.victimFraudAmount.toLocaleString('en-IN')} via ${cur.title}. Primary transfer occurred via UTR ${cur.victimUTR}.</div>
-      <div>2. CHRONOLOGICAL MONEY-TRAIL ATTRIBUTION: Multi-hop trace normalisation reconstructed ${Object.keys(trace.nodes || {}).length - 1} connected banking nodes. Funds conserved with ₹${(trace.totalResidual || 0).toLocaleString('en-IN')} actionable residual exposure.</div>
+      <div>1. EXECUTIVE SUMMARY: Complainant ${escapeHTML(cur.victimName)} reported fraudulent inducement of ₹${cur.victimFraudAmount.toLocaleString('en-IN')} via ${escapeHTML(cur.title)}. Primary transfer occurred via UTR ${escapeHTML(cur.victimUTR)}.</div>
+      <div>2. CHRONOLOGICAL MONEY-TRAIL ATTRIBUTION: Multi-hop trace normalisation reconstructed ${Math.max(0, Object.keys(trace.nodes || {}).length - 1)} connected banking nodes. Funds conserved with ₹${(trace.totalResidual || 0).toLocaleString('en-IN')} actionable residual exposure.</div>
       <div>3. STATUTORY STATUS: DRAFT REPORT — FOR INVESTIGATING OFFICER VERIFICATION UNDER SEC 65B BSA / IEA.</div>
     `;
   }
 }
 
-// Real SHA-256 Verification on Evidence
+// Real SHA-256 Re-Computation & Verification Against Stored IndexedDB Bytes
 async function verifySingleHash(evId) {
   const ev = MuleNetState.evidenceFiles.find(e => e.id === evId);
-  if (!ev) return;
+  if (!ev) return { ok: false, reason: 'NOT_FOUND' };
 
-  // Re-verify against original hash string
-  if (ev.sha256 && ev.sha256.length === 64) {
-    showToast("Integrity Verified", `Evidence ${ev.filename} bit-for-bit SHA-256 checksum matched: ${ev.sha256.substring(0, 16)}...`, "success");
-    logAuditAction('EVIDENCE_VERIFY', `Cryptographic SHA-256 verification succeeded for ${ev.filename}.`);
+  const storedBytes = await MuleNetEvidenceDB.get(evId);
+  if (!storedBytes) {
+    ev.integrityStatus = 'NO_BYTES_STORED';
+    saveToLocalStorage();
+    renderEvidenceView();
+    showToast("Raw Bytes Unavailable", `No original file bytes stored in IndexedDB for ${ev.filename}. Upload the file to enable bit-for-bit verification.`, "info");
+    return { ok: false, reason: 'NO_BYTES_STORED' };
+  }
+
+  const recomputedHash = await computeRealSHA256(storedBytes);
+  if (recomputedHash === ev.sha256) {
+    ev.integrityStatus = 'VERIFIED';
+    saveToLocalStorage();
+    renderEvidenceView();
+    showToast("Integrity Verified", `Recomputed SHA-256 matched stored digest for ${ev.filename}: ${recomputedHash.substring(0, 16)}...`, "success");
+    logAuditAction('EVIDENCE_VERIFY', `Cryptographic SHA-256 recomputation matched for ${ev.filename}.`);
+    return { ok: true, recomputedHash };
   } else {
-    showToast("Verification Error", `Invalid checksum format for ${ev.filename}`, "error");
+    ev.integrityStatus = 'TAMPERED_MISMATCH';
+    saveToLocalStorage();
+    renderEvidenceView();
+    showToast("INTEGRITY FAILURE", `SHA-256 mismatch for ${ev.filename}! Stored bytes have been modified.`, "error");
+    logAuditAction('EVIDENCE_TAMPER_ALERT', `SHA-256 verification FAILED for ${ev.filename}. Expected ${ev.sha256.substring(0, 12)}, got ${recomputedHash.substring(0, 12)}.`);
+    return { ok: false, reason: 'HASH_MISMATCH', recomputedHash };
   }
 }
 
-function verifyAllHashes() {
-  const allValid = MuleNetState.evidenceFiles.every(e => e.sha256 && e.sha256.length === 64);
-  if (allValid) {
-    showToast("Integrity Verified", `All ${MuleNetState.evidenceFiles.length} evidence records verified against stored SHA-256 digests.`, "success");
-    logAuditAction('EVIDENCE_VERIFY', 'Batch cryptographic verification passed across all evidence files.');
+async function verifyAllHashes() {
+  const caseEvidence = MuleNetState.evidenceFiles.filter(ev => ev.caseId === MuleNetState.currentCaseId);
+  let verifiedCount = 0;
+  let tamperedCount = 0;
+  let noBytesCount = 0;
+
+  for (const ev of caseEvidence) {
+    const res = await verifySingleHash(ev.id);
+    if (res.ok) verifiedCount++;
+    else if (res.reason === 'HASH_MISMATCH') tamperedCount++;
+    else noBytesCount++;
+  }
+
+  if (tamperedCount > 0) {
+    showToast("Tampering Detected", `${tamperedCount} file(s) FAILED SHA-256 recomputation! (${verifiedCount} verified, ${noBytesCount} unbacked metadata)`, "error");
+  } else if (verifiedCount > 0) {
+    showToast("Batch Verification Complete", `${verifiedCount} file(s) verified bit-for-bit (${noBytesCount} seed metadata records without raw blobs).`, "success");
+  } else {
+    showToast("No Raw Blobs Stored", `${noBytesCount} seed metadata record(s) have no uploaded bytes in IndexedDB yet.`, "info");
   }
 }
 
@@ -2312,6 +3244,7 @@ function generateOfficialPDFReport() {
   const curCase = MuleNetState.cases.find(c => c.caseId === MuleNetState.currentCaseId) || MuleNetState.cases[0];
   const trace = traceMoneyTrailFromVictim(curCase.victimUTR, MuleNetState.attributionMode);
   const priorityList = calculateDynamicFreezePriority(trace);
+  const crossMatches = computeDynamicCrossCaseMatches(curCase.caseId);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
@@ -2334,7 +3267,7 @@ function generateOfficialPDFReport() {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.text("2. PRIORITIZED SUSPECT ACCOUNTS (RECOMMENDED DEBIT FREEZE REVIEW)", 14, 68);
+  doc.text("2. INVESTIGATIVE PRIORITY ACCOUNTS (PENDING OFFICER REVIEW)", 14, 68);
 
   const tableRows = priorityList.map((a, i) => [
     `#${i+1}`,
@@ -2343,7 +3276,7 @@ function generateOfficialPDFReport() {
     a.holder,
     `INR ${a.residual.toLocaleString('en-IN')}`,
     `${a.riskScore}/100`,
-    a.priorityLevel
+    `${a.priorityLevel}${!a.covered ? ' [No Stmt]' : ''}`
   ]);
 
   if (doc.autoTable) {
@@ -2362,16 +3295,27 @@ function generateOfficialPDFReport() {
     doc.text("3. DIGITAL INFRASTRUCTURE & CROSS-CASE INTELLIGENCE", 14, nextY);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    const caseInfra = MuleNetState.infrastructure.find(i => i.linkedCase && i.linkedCase.includes(curCase.caseId)) || MuleNetState.infrastructure[0];
-    doc.text(`• Identified Domain: ${caseInfra.domain} (Registrar: ${caseInfra.registrar}, IP: ${caseInfra.ip})`, 14, nextY + 6);
-    doc.text(`• Infrastructure Classification: ${caseInfra.vpnTorIndicator}`, 14, nextY + 11);
-    doc.text(`• Evidence SHA-256 Digest: ${curCase.evidenceHash}`, 14, nextY + 16);
+    const caseInfraList = MuleNetState.infrastructure.filter(i => i.linkedCase && (i.linkedCase.includes(curCase.caseId) || i.linkedCase.includes(curCase.firNo)));
+    let curY = nextY + 6;
+    if (caseInfraList.length > 0) {
+      caseInfraList.slice(0, 3).forEach(ci => {
+        doc.text(`• Domain: ${ci.domain} (Registrar: ${ci.registrar}, IP: ${ci.ip}, Class: ${ci.vpnTorIndicator})`, 14, curY);
+        curY += 5;
+      });
+    } else {
+      doc.text("• No digital infrastructure indicators currently linked to this FIR.", 14, curY);
+      curY += 5;
+    }
+    doc.text(`• Cross-Case Syndicate Links Detected: ${crossMatches.length} (${crossMatches.filter(m => m.status === 'VERIFIED').length} Verified, ${crossMatches.filter(m => m.status === 'PENDING_REVIEW').length} Pending Review)`, 14, curY);
+    curY += 5;
+    doc.text(`• Case Evidence SHA-256 Digest: ${curCase.evidenceHash}`, 14, curY);
+    curY += 8;
     doc.setFont("helvetica", "bold");
-    doc.text("DRAFT — FOR AUTHORIZED INVESTIGATING OFFICER VERIFICATION UNDER SEC 65B BSA / IEA", 14, nextY + 24);
+    doc.text("DRAFT — FOR AUTHORIZED INVESTIGATING OFFICER VERIFICATION UNDER SEC 65B BSA / IEA", 14, curY);
   }
 
   doc.save(`MuleNet_Investigation_Report_${curCase.firNo.replace(/[\/\s]/g, '_')}.pdf`);
-  showToast("Report Generated", "Dynamic PDF report downloaded successfully.", "success");
+  showToast("Report Generated", "Case-specific PDF report downloaded successfully.", "success");
   logAuditAction('REPORT_GEN_PDF', `Generated official investigation PDF report for ${curCase.firNo}.`);
 }
 
@@ -2382,116 +3326,146 @@ function generateComprehensiveExcelWorkbook() {
   }
   const wb = XLSX.utils.book_new();
   const curCase = MuleNetState.cases.find(c => c.caseId === MuleNetState.currentCaseId) || MuleNetState.cases[0];
-  const caseTxns = MuleNetState.transactions.filter(t => t.caseId === MuleNetState.currentCaseId || !t.caseId);
+  const caseTxns = MuleNetState.transactions.filter(t => t.caseId === curCase.caseId);
   const trace = traceMoneyTrailFromVictim(curCase.victimUTR, MuleNetState.attributionMode);
   const priorityList = calculateDynamicFreezePriority(trace);
+  const sanitize = sanitizeSpreadsheetCell;
 
-  // Safe string sanitization against CSV/formula injection
-  const sanitize = (val) => {
-    if (typeof val === 'string' && /^[=+\-@]/.test(val)) return "'" + val;
-    return val;
-  };
+  // Sheet 1: Case Summary (Strict case-specific metadata)
+  const summaryRows = [{
+    FIR_Number: sanitize(curCase.firNo),
+    Case_ID: sanitize(curCase.caseId),
+    Title: sanitize(curCase.title),
+    Police_Station: sanitize(curCase.policeStation),
+    Victim_Name: sanitize(curCase.victimName),
+    Victim_Account: sanitize(curCase.victimAccount),
+    Primary_UTR: sanitize(curCase.victimUTR),
+    Reported_Fraud_INR: curCase.victimFraudAmount,
+    Attribution_Mode: MuleNetState.attributionMode,
+    Total_Traced_Residual_INR: trace.totalResidual || 0,
+    Conservation_Balanced: trace.isBalanced ? 'YES' : 'NO',
+    Evidence_Hash: sanitize(curCase.evidenceHash)
+  }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Case_Summary");
 
-  // Sheet 1: Transactions
+  // Sheet 2: Transactions (Strict case isolation)
   const cleanTxns = caseTxns.map(t => ({
-    Transaction_ID: t.id,
-    Date: t.date,
-    Time: t.time,
-    Bank: t.bank,
-    Account: t.account,
-    Direction: t.direction,
+    Transaction_ID: sanitize(t.id),
+    Date: sanitize(t.date),
+    Time: sanitize(t.time),
+    Bank: sanitize(t.bank),
+    Account: sanitize(t.account),
+    Direction: sanitize(t.direction),
     Amount_INR: t.amount,
     Balance_INR: t.balance,
     Counterparty: sanitize(t.counterpartyName),
-    UTR: t.utr,
-    Flag: t.flag
+    UTR: sanitize(t.utr),
+    Flag: sanitize(t.flag)
   }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanTxns), "Transactions");
 
-  // Sheet 2: Mule Accounts
-  const cleanAccs = MuleNetState.accounts.map(a => ({
-    Account: a.accountNumber,
-    Bank: a.bank,
-    Holder: sanitize(a.holder),
-    Risk_Score: a.riskScore,
-    Status: a.status,
-    Inflow_INR: a.inflow,
-    Outflow_INR: a.outflow,
-    Residual_INR: a.residual
-  }));
+  // Sheet 3: Mule Accounts (Case-specific accounts only)
+  const caseAccNumbers = new Set(caseTxns.map(t => t.account).filter(Boolean));
+  const cleanAccs = MuleNetState.accounts
+    .filter(a => caseAccNumbers.has(a.accountNumber))
+    .map(a => {
+      const analysis = calculateMuleRiskScore(a, caseTxns);
+      const tNode = trace.nodes && trace.nodes[a.accountNumber];
+      return {
+        Account: sanitize(a.accountNumber),
+        Bank: sanitize(a.bank),
+        Holder: sanitize(a.holder),
+        Risk_Score: analysis.score,
+        Risk_Category: analysis.category,
+        Inflow_INR: tNode ? tNode.received : a.inflow,
+        Outflow_INR: tNode ? tNode.outflow : a.outflow,
+        Residual_INR: tNode ? tNode.retained : a.residual
+      };
+    });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanAccs), "Mule_Accounts");
 
-  // Sheet 3: Money Trail
+  // Sheet 4: Money Trail
   const trailRows = Object.values(trace.nodes || {}).map(n => ({
-    Node_ID: n.id,
+    Node_ID: sanitize(n.id),
     Label: sanitize(n.rawLabel || n.id),
-    Bank: n.bank,
+    Bank: sanitize(n.bank),
     Layer: n.layer,
+    Covered_By_Statement: n.covered ? 'YES' : 'NO',
     Received_Attributed: n.received,
     Residual_Exposure: n.retained,
     Outflow_Routed: n.outflow
   }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trailRows), "Money_Trail");
 
-  // Sheet 4: Priority List
+  // Sheet 5: Priority List
   const cleanPrio = priorityList.map((a, i) => ({
     Priority_Rank: i + 1,
-    Account: a.accountNumber,
-    Bank: a.bank,
+    Account: sanitize(a.accountNumber),
+    Bank: sanitize(a.bank),
     Holder: sanitize(a.holder),
     Residual_Exposure_INR: a.residual,
     Risk_Score: a.riskScore,
-    Priority_Level: a.priorityLevel
+    Investigative_Priority: sanitize(a.priorityLevel)
   }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanPrio), "Priority_List");
 
-  // Sheet 5: Digital Infra
-  const cleanInfra = MuleNetState.infrastructure.map(inf => ({
-    Domain: inf.domain,
-    Registrar: inf.registrar,
-    Creation_Date: inf.creationDate,
-    IP: inf.ip,
-    ASN: inf.asn,
-    Hosting: inf.isp,
-    VPN_Tor_Indicator: inf.vpnTorIndicator,
-    Linked_Case: inf.linkedCase
-  }));
+  // Sheet 6: Digital Infra (Case-specific linked infra only)
+  const cleanInfra = MuleNetState.infrastructure
+    .filter(inf => inf.linkedCase && (inf.linkedCase.includes(curCase.caseId) || inf.linkedCase.includes(curCase.firNo)))
+    .map(inf => ({
+      Domain: sanitize(inf.domain),
+      Registrar: sanitize(inf.registrar),
+      Creation_Date: sanitize(inf.creationDate),
+      IP: sanitize(inf.ip),
+      ASN: sanitize(inf.asn),
+      Hosting: sanitize(inf.isp),
+      VPN_Tor_Indicator: sanitize(inf.vpnTorIndicator),
+      Linked_Case: sanitize(inf.linkedCase)
+    }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanInfra), "Digital_Infra");
 
-  // Sheet 6: Cross Case Matches
-  const crossMatches = [
-    { Type: "Bank Account", Identifier: "1192837465", Cases: "FIR 104 & FIR 072", Match: "STRONG" },
-    { Type: "Phishing Domain", Identifier: "kyc-verify-portal.net", Cases: "FIR 104 & FIR 072", Match: "DIRECT" },
-    { Type: "Tor IP Node", Identifier: "185.220.101.45", Cases: "FIR 104 & FIR 119", Match: "CONTEXTUAL" }
-  ];
+  // Sheet 7: Cross Case Matches (Dynamically computed — zero hardcoded rows)
+  const crossMatches = computeDynamicCrossCaseMatches(curCase.caseId).map(m => ({
+    Type: sanitize(m.type),
+    Identifier: sanitize(m.identifier),
+    Cases: sanitize(m.cases),
+    Match_Strength: sanitize(m.strength),
+    Evidence: sanitize(m.evidence),
+    Officer_Status: sanitize(m.status)
+  }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(crossMatches), "Cross_Case_Matches");
 
-  // Sheet 7: Evidence Register
-  const cleanEv = MuleNetState.evidenceFiles.map(e => ({
-    Evidence_ID: e.id,
-    Filename: e.filename,
-    Type: e.type,
-    Upload_Time: e.uploadTime,
-    SHA256_Checksum: e.sha256,
-    Status: e.status
-  }));
+  // Sheet 8: Evidence Register (Case-specific evidence only)
+  const cleanEv = MuleNetState.evidenceFiles
+    .filter(e => e.caseId === curCase.caseId)
+    .map(e => ({
+      Evidence_ID: sanitize(e.id),
+      Filename: sanitize(e.filename),
+      Type: sanitize(e.type),
+      Upload_Time: sanitize(e.uploadTime),
+      SHA256_Checksum: sanitize(e.sha256),
+      Reconciliation_Status: sanitize(e.status),
+      Integrity_Check: sanitize(e.integrityStatus || 'RECORDED')
+    }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanEv), "Evidence_Register");
 
-  // Sheet 8: Audit Log
-  const cleanAudit = MuleNetState.auditLogs.map(l => ({
-    Log_ID: l.id,
-    Timestamp: l.timestamp,
-    Officer: l.officer,
-    Action: l.action,
-    Case_ID: l.caseId,
-    Details: sanitize(l.details),
-    Hash: l.hash
-  }));
+  // Sheet 9: Audit Log (Case-specific audit entries)
+  const cleanAudit = MuleNetState.auditLogs
+    .filter(l => l.caseId === curCase.caseId || l.action === 'PLATFORM_INIT')
+    .map(l => ({
+      Log_ID: sanitize(l.id),
+      Timestamp: sanitize(l.timestamp),
+      Officer: sanitize(l.officer),
+      Action: sanitize(l.action),
+      Case_ID: sanitize(l.caseId),
+      Details: sanitize(l.details),
+      Hash: sanitize(l.hash)
+    }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cleanAudit), "Audit_Log");
 
   XLSX.writeFile(wb, `MuleNet_Forensic_Workbook_${curCase.firNo.replace(/[\/\s]/g, '_')}.xlsx`);
-  showToast("Excel Exported", "9-Sheet Forensic Workbook generated successfully.", "success");
-  logAuditAction('REPORT_GEN_EXCEL', 'Generated 9-sheet comprehensive Excel workbook.');
+  showToast("Excel Exported", "9-Sheet Case-Specific Forensic Workbook generated successfully.", "success");
+  logAuditAction('REPORT_GEN_EXCEL', `Generated 9-sheet case-specific Excel workbook for ${curCase.firNo}.`);
 }
 
 // -------------------------------------------------------------
@@ -2503,8 +3477,8 @@ function runAllSelfTests() {
 
   let results = [];
 
-  // Test 1: Statement Reconciliation Invariant (Single account statement)
-  const kotakTxns = MuleNetState.transactions.filter(t => t.account === '9182736450');
+  // Test 1: Statement Reconciliation Invariant (Single account statement in FIR-104-2024)
+  const kotakTxns = MuleNetState.transactions.filter(t => t.account === '9182736450' && t.caseId === 'FIR-104-2024');
   const recResult = verifyStatementReconciliation(kotakTxns, 40000, 25000);
   results.push({
     name: "Test 1: Statement Reconciliation Invariant",
@@ -2516,7 +3490,7 @@ function runAllSelfTests() {
   // Test 2: Temporal Precedence Constraint
   const preFundTxn = MuleNetState.transactions.find(t => t.id === 'TXN-001');
   const victimTxn = MuleNetState.transactions.find(t => t.flag === 'VICTIM_PRIMARY_INFLOW');
-  const isPreFundExcluded = new Date(preFundTxn.timestamp) < new Date(victimTxn.timestamp);
+  const isPreFundExcluded = preFundTxn && victimTxn && new Date(preFundTxn.timestamp) < new Date(victimTxn.timestamp);
   results.push({
     name: "Test 2: Chronological Attribution Constraint",
     formula: "Disallow debit attribution to funds arriving post-event",
@@ -2525,13 +3499,16 @@ function runAllSelfTests() {
   });
 
   // Test 3: Anti-Double Counting Fund Conservation Law
+  const prevCase = MuleNetState.currentCaseId;
+  MuleNetState.currentCaseId = MuleNetState.cases[0].caseId;
   const trace = traceMoneyTrailFromVictim(MuleNetState.cases[0].victimUTR, 'FIFO');
+  MuleNetState.currentCaseId = prevCase;
   const isConserved = trace && trace.isBalanced;
   results.push({
     name: "Test 3: Money Conservation Law",
-    formula: "Victim Inflow == Total Residuals + Attributed Outflows + Unresolved",
+    formula: "Victim Inflow == Total Residuals + External Outflows",
     passed: isConserved,
-    detail: `Victim: ₹${trace.victimAmount.toLocaleString()} == Residual: ₹${trace.totalResidual.toLocaleString()} (Discrepancy: ₹0)`
+    detail: `Victim: ₹${(trace.victimAmount || 0).toLocaleString()} == Residual: ₹${Math.round(trace.totalResidual || 0).toLocaleString()} + Ext: ₹${Math.round(trace.externalOutflow || 0).toLocaleString()} (Discrepancy: ₹${Math.round(trace.discrepancy || 0)})`
   });
 
   // Test 4: Weighted Rule Scoring Normalization
@@ -2557,23 +3534,26 @@ function runAllSelfTests() {
     detail: "Invalid UTR correctly rejected with error message."
   });
 
-  // Test 6: Cross-Case Syndicate Identifier Matching
-  const sharedAcc = MuleNetState.accounts.find(a => a.accountNumber === '1192837465');
-  const hasCrossMatch = sharedAcc && sharedAcc.crossCase;
+  // Test 6: Cross-Case Syndicate Identifier Matching (Dynamic)
+  const dynMatches = computeDynamicCrossCaseMatches();
+  const hasCrossMatch = dynMatches.some(m => m.identifier.includes('1192837465'));
   results.push({
     name: "Test 6: Cross-Case Syndicate Identifier Matching",
-    formula: "Exact match across multiple police FIR registries",
+    formula: "Dynamic ledger intersection across multiple police FIR registries",
     passed: hasCrossMatch,
-    detail: "Axis Bank 1192837465 detected in FIR 104 and FIR 072."
+    detail: `Detected ${dynMatches.length} dynamic cross-case links (Axis Bank 1192837465 matched across FIRs).`
   });
 
-  // Test 7: Cryptographic SHA-256 Evidence Hash Consistency
-  const hasEvHashes = MuleNetState.evidenceFiles.every(e => e.sha256 && e.sha256.length === 64);
+  // Test 7: Cryptographic SHA-256 Computation & Deterministic Verification
+  const probeDigest1 = sha256PureJS('MuleNet-Evidence-Integrity-Check');
+  const probeDigest2 = sha256PureJS('MuleNet-Evidence-Integrity-Check');
+  const tamperedDigest = sha256PureJS('MuleNet-Evidence-Integrity-Tampered');
+  const hasEvHashes = /^[0-9a-f]{64}$/.test(probeDigest1) && probeDigest1 === probeDigest2 && probeDigest1 !== tamperedDigest;
   results.push({
     name: "Test 7: Evidence Cryptographic Hash Seal",
-    formula: "SHA-256 256-bit fixed-length hex digest verification",
+    formula: "SHA-256 256-bit deterministic digest + tamper sensitivity",
     passed: hasEvHashes,
-    detail: "All files carry verified 64-character SHA-256 strings."
+    detail: `Deterministic 64-hex SHA-256 verified (${probeDigest1.substring(0, 12)}...) and tamper-sensitive.`
   });
 
   // Accurate counting!
@@ -2756,9 +3736,9 @@ function handleGlobalSearch(evt) {
     }
   });
 
-  MuleNetState.transactions.forEach(t => {
-    if (t.utr && t.utr.toLowerCase().includes(query)) {
-      matches.push({ title: `UTR: ${t.utr} (₹${t.amount.toLocaleString()})`, view: 'money-trail-analysis' });
+  MuleNetState.transactions.filter(t => t.caseId === MuleNetState.currentCaseId).forEach(t => {
+    if ((t.utr && t.utr.toLowerCase().includes(query)) || (t.account && t.account.toLowerCase().includes(query))) {
+      matches.push({ title: `UTR: ${t.utr || t.id} (₹${t.amount.toLocaleString()})`, view: 'money-trail-analysis' });
     }
   });
 
@@ -2771,8 +3751,8 @@ function handleGlobalSearch(evt) {
   if (matches.length > 0) {
     resContainer.classList.remove('hidden');
     resContainer.innerHTML = matches.slice(0, 5).map(m => `
-      <div onclick="navigateTo('${m.view}'); document.getElementById('globalSearchResults').classList.add('hidden');" class="p-1.5 hover:bg-surface-container rounded cursor-pointer text-[11px] font-mono flex items-center justify-between">
-        <span class="text-on-surface">${m.title}</span>
+      <div onclick="navigateTo('${escapeHTML(m.view)}'); document.getElementById('globalSearchResults').classList.add('hidden');" class="p-1.5 hover:bg-surface-container rounded cursor-pointer text-[11px] font-mono flex items-center justify-between">
+        <span class="text-on-surface">${escapeHTML(m.title)}</span>
         <span class="text-[9px] text-secondary font-bold">JUMP ›</span>
       </div>
     `).join('');
@@ -2938,6 +3918,7 @@ function saveSettingsConfiguration() {
 function resetEntireDemoPristine() {
   if (confirm("Restore MuleNet to original pristine demo state? This will clear all uploaded statements and reset test fixtures.")) {
     localStorage.removeItem('mulenet_case_data');
+    MuleNetEvidenceDB.clear();
     loadInitialData();
     renderAllViews();
     initCytoscapeMoneyTrail();
@@ -2962,8 +3943,8 @@ function showToast(title, message, type = 'info') {
       ${type === 'success' ? 'check_circle' : 'info'}
     </span>
     <div>
-      <div class="font-bold text-[11px]">${title}</div>
-      <div class="text-[10px] text-slate-300">${message}</div>
+      <div class="font-bold text-[11px]">${escapeHTML(title)}</div>
+      <div class="text-[10px] text-slate-300">${escapeHTML(message)}</div>
     </div>
   `;
 

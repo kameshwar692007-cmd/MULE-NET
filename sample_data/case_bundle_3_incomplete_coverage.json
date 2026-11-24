@@ -1,0 +1,48 @@
+{
+  "caseMetadata": {
+    "caseId": "FIR-SYN-INCOMPLETE-03",
+    "title": "Incomplete Statement Coverage Dataset",
+    "victimAmount": 80000,
+    "victimUTR": "UTR-SYN-INC-300"
+  },
+  "transactions": [
+    {
+      "id": "SYN-I1",
+      "date": "2024-11-14",
+      "time": "14:00:00",
+      "timestamp": "2024-11-14T14:00:00+05:30",
+      "bank": "Canara Bank",
+      "account": "INC_ACC_1",
+      "holder": "Covered Account 1",
+      "direction": "CREDIT",
+      "debit": 0,
+      "credit": 80000,
+      "amount": 80000,
+      "balance": 80000,
+      "counterpartyAccount": "VICTIM_SYN_3",
+      "counterpartyName": "Victim Synthetic 3",
+      "utr": "UTR-SYN-INC-300",
+      "narration": "UPI Fraud Inflow",
+      "flag": "VICTIM_PRIMARY_INFLOW"
+    },
+    {
+      "id": "SYN-I2",
+      "date": "2024-11-14",
+      "time": "14:20:00",
+      "timestamp": "2024-11-14T14:20:00+05:30",
+      "bank": "Canara Bank",
+      "account": "INC_ACC_1",
+      "holder": "Covered Account 1",
+      "direction": "DEBIT",
+      "debit": 65000,
+      "credit": 0,
+      "amount": 65000,
+      "balance": 15000,
+      "counterpartyAccount": "UNCOVERED_OFFSHORE_ACC",
+      "counterpartyName": "Missing Statement Entity",
+      "utr": "UTR-SYN-INC-301",
+      "narration": "NEFT Transfer to Uncovered Bank",
+      "flag": "INGESTED_DEBIT"
+    }
+  ]
+}

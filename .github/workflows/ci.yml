@@ -40,3 +40,12 @@ jobs:
     - name: Execute Comprehensive Forensic Analytical Tests
       run: |
         node test_comprehensive_audit.js
+
+    - name: Install Playwright & Chromium for Browser E2E Tests
+      run: |
+        npm ci || npm install --no-save playwright
+        npx playwright install chromium --with-deps
+
+    - name: Execute Real Browser E2E Tests (Offline + Uploads + Downloads + IndexedDB)
+      run: |
+        node tests/e2e_browser.js

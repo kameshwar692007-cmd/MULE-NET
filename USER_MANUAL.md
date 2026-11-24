@@ -13,12 +13,12 @@
 **MuleNet** is an end-to-end financial cybercrime intelligence platform designed specifically for the **Rajasthan Police Cyber Crime Investigation Division**. It bridges the gap between fragmented bank statements, digital communication traces, and urgent field actions.
 
 Rather than presenting static dashboards or mockups, MuleNet provides **mathematically functional analytical engines** directly in the browser:
-1. **Multi-Bank Statement Normalization & Reconciliation Engine:** Mathematically proves $\text{Opening Balance} + \sum \text{Credits} - \sum \text{Debits} = \text{Closing Balance}$ and flags discrepancies at the row level.
-2. **Chronological Money-Trail Tracing Engine:** Enforces temporal precedence (pre-fund debits are excluded), conserves funds with $0\%$ leakage, and reconstructs multi-hop layering up to Layer 3 sinks via an interactive **Cytoscape.js** network graph.
-3. **Explainable Mule Detection Engine:** Evaluates accounts against 8 configurable heuristic rules with transparent score breakdowns.
-4. **Freeze-Priority Engine:** Calculates immediate actionable residual exposure to prevent funds from being cashed out.
-5. **Cross-Case Syndicate Correlator:** Automatically detects shared mule accounts, phishing domains, and bulletproof Tor exit nodes across multiple FIRs.
-6. **Court-Ready Evidentiary Outputs:** Generates official **Section 91 CrPC freeze notices**, downloadable **Forensic PDF case reports** with Rajasthan Police letterheads, and **9-sheet Excel workbooks**.
+1. **Multi-Bank Statement Normalization & Reconciliation Engine (CSV, XLSX, PDF, JSON):** Uses embedded **SheetJS** and **PDF.js** (with local Blob worker) to extract genuine rows without fabricated defaults, validates schemas/numerics with a **Rejected Rows Diagnostics** panel, proves $\text{Opening Balance} + \sum \text{Credits} - \sum \text{Debits} = \text{Closing Balance}$, and flags row-level arithmetic discrepancies.
+2. **Globally Chronological Money-Trail Tracing Engine:** Processes case-isolated events in global time order, supporting mixed opening balances, circular transfers, repeated account visits, FIFO and Proportional attribution, and explicit unresolved/external destination tracking via an interactive **Cytoscape.js** network graph.
+3. **Explainable Mule Detection Engine:** Evaluates case-isolated accounts against 8 configurable time-windowed heuristic rules (with exact cited transaction IDs).
+4. **Investigative Priority Engine:** Ranks suspect accounts by dynamic residual exposure and risk score for authorized officer debit-freeze review.
+5. **Cross-Case Syndicate Correlator:** Dynamically detects shared accounts, UTRs, domains, and IPs across multiple FIRs with **Pending Review / Verified / Dismissed** officer workflow states.
+6. **Evidence Vault & Court-Ready Reporting:** Preserves raw uploaded file bytes in **IndexedDB** for bit-for-bit **SHA-256 recomputation**, drafts **Section 91 CrPC / 94 BNSS** notices, and exports case-specific **Forensic PDF Reports** and **9-Sheet Excel Workbooks** (with formula-injection protection).
 
 ---
 
@@ -26,7 +26,7 @@ Rather than presenting static dashboards or mockups, MuleNet provides **mathemat
 
 1. **No Backend Required:** MuleNet runs entirely in client-side modern JavaScript.
 2. **Launch:** Double-click [`index.html`](index.html) or open it in any modern browser (**Google Chrome**, **Microsoft Edge**, **Mozilla Firefox**, or **Brave**).
-3. **Offline Operation:** All core tracing algorithms, synthetic datasets, PDF generators, Excel exporters, and cryptographic hash routines operate **100% offline**.
+3. **100% Offline Bundle:** Tailwind CSS, Cytoscape.js, SheetJS, jsPDF, jsPDF-AutoTable, PDF.js (and its worker), synthetic datasets, and cryptographic SHA-256 routines are all **bundled directly inside `index.html`** for complete offline operation. (Live passive OSINT queries via Google DoH/RDAP/crt.sh automatically fall back to exact cached case records or report `"No Live Data Found"` when offline.)
 
 ---
 
@@ -39,22 +39,23 @@ For hackathon judges with limited time, follow these three high-impact interacti
 - A floating controller will appear at the bottom of the screen.
 - Click **`NEXT STEP ›`** to walk through the entire investigative workflow:
   * *Step 1:* Review Victim Complaint (FIR No. 104/2024, ₹1,00,000 fraud).
-  * *Step 2 & 3:* Ingest statements and detect a deliberate reconciliation error in Row 4 of the SBI statement.
-  * *Step 4:* Inspect 8 explainable heuristic rules on flagged mule accounts.
+  * *Step 2 & 3:* Ingest statements (CSV/XLSX/PDF/JSON) and detect a deliberate reconciliation error in Row 4 of the SBI statement.
+  * *Step 4:* Inspect 8 explainable time-windowed heuristic rules on flagged mule accounts.
   * *Step 5 & 6:* Trace victim UTR `UTR-2024-RJ-894102` through multi-hop branches using the interactive Cytoscape network graph and playback slider.
-  * *Step 7:* Rank accounts by residual balance (Axis Bank Account D holds ₹50,000).
-  * *Step 8 & 9:* Perform passive domain/IP OSINT and uncover cross-case links to Jodhpur and Kota FIRs.
-  * *Step 10 & 11:* Generate an official forensic PDF report and draft a Section 91 CrPC freeze directive.
+  * *Step 7:* Rank accounts by residual exposure for prioritized officer review.
+  * *Step 8 & 9:* Perform passive domain/IP OSINT and review dynamically discovered cross-case links across Jodhpur and Kota FIRs.
+  * *Step 10 & 11:* Verify evidence SHA-256 digests against IndexedDB raw bytes, download the case-specific PDF & 9-sheet Excel workbook, and draft a Section 91 CrPC / 94 BNSS notice.
 
 ### 🧪 Action 2: Inspect Live Automated Self-Tests
 - Click the **`SELF-TESTS`** button in the header.
-- MuleNet will run 6 live unit tests verifying:
-  1. *Reconciliation Balance Equation*
+- MuleNet will run **7 live automated acceptance tests** verifying:
+  1. *Statement Reconciliation Invariant*
   2. *Chronological Attribution Constraint* (Pre-fund exclusion)
-  3. *Fund Conservation Law* ($\text{Victim} = \text{Residual} + \text{Outflow}$)
-  4. *Rule Scoring Normalization* ($0 \le \text{Score} \le 100$)
-  5. *Cross-Case Syndicate Identifier Matching*
-  6. *Evidence SHA-256 Cryptographic Consistency*
+  3. *Money Conservation Law* ($\text{Victim} = \text{Residual} + \text{External Outflow}$)
+  4. *Weighted Rule Scoring Normalization* ($0 \le \text{Score} \le 100$)
+  5. *Nonexistent UTR Error Handling* (Rejects invalid UTRs without fallback)
+  6. *Dynamic Cross-Case Syndicate Identifier Matching*
+  7. *Evidence Cryptographic SHA-256 Seal & Tamper Sensitivity*
 
 ### 📥 Action 3: Download Forensic Outputs
 - Navigate to **Reports & Evidence** in the left sidebar:

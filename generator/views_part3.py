@@ -14,7 +14,7 @@ VIEW_FREEZE_PRIORITY = """
     <div class="flex items-center gap-2">
       <button onclick="bulkDraftFreezeNotices()" class="flex items-center gap-1.5 px-3 py-1.5 bg-error text-white rounded font-label-caps text-[11px] font-bold tracking-wider hover:bg-red-700 shadow-sm transition-opacity">
         <span class="material-symbols-outlined text-[15px]">gavel</span>
-        <span>BULK DRAFT FREEZE DIRECTIVES (6)</span>
+        <span>BULK DRAFT PRIORITY NOTICES</span>
       </button>
       <button onclick="exportPriorityListExcel()" class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-low hover:bg-surface-container text-on-surface rounded font-label-caps text-[11px] tracking-wider border border-outline-variant">
         <span class="material-symbols-outlined text-[15px]">download</span>
@@ -191,25 +191,8 @@ VIEW_CROSS_CASE = """
   </div>
 
   <!-- Heat List of Multi-Case Syndicate Entities -->
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-    <div class="bg-surface-container-lowest rounded-lg p-3 shadow-sm border border-outline-variant border-l-4 border-error">
-      <div class="font-label-caps text-[10px] text-error font-bold">SHARED BANK ACCOUNT (STRONG MATCH)</div>
-      <div class="font-mono text-[14px] font-bold text-on-surface mt-1">Axis Bank: 1192837465</div>
-      <div class="text-[11px] text-on-surface-variant">Suresh Traders • Shared across <strong class="text-on-surface">FIR 104 & FIR 072</strong></div>
-      <div class="mt-2 text-[10px] font-mono text-secondary">Combined Defrauded Pool: ₹4,50,000</div>
-    </div>
-    <div class="bg-surface-container-lowest rounded-lg p-3 shadow-sm border border-outline-variant border-l-4 border-amber-500">
-      <div class="font-label-caps text-[10px] text-amber-600 font-bold">SHARED PHISHING PORTAL (DIRECT MATCH)</div>
-      <div class="font-mono text-[14px] font-bold text-on-surface mt-1">kyc-verify-portal.net</div>
-      <div class="text-[11px] text-on-surface-variant">Used in Telegram Scam & Jodhpur Job Phishing</div>
-      <div class="mt-2 text-[10px] font-mono text-secondary">Cloudflare Proxy Origin</div>
-    </div>
-    <div class="bg-surface-container-lowest rounded-lg p-3 shadow-sm border border-outline-variant border-l-4 border-purple-500">
-      <div class="font-label-caps text-[10px] text-purple-600 font-bold">SHARED BULLETPROOF IP (CONTEXTUAL)</div>
-      <div class="font-mono text-[14px] font-bold text-on-surface mt-1">185.220.101.45 (AS9009)</div>
-      <div class="text-[11px] text-on-surface-variant">Hosts Trading Portal & Kota Loan Harassment APK</div>
-      <div class="mt-2 text-[10px] font-mono text-secondary">Tor Exit Node Infrastructure</div>
-    </div>
+  <div id="crossCaseCardsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+    <!-- Rendered dynamically from actual case correlations -->
   </div>
 
   <!-- Cross-Case Table -->
