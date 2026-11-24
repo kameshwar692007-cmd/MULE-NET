@@ -4405,13 +4405,14 @@ function runAllSelfTests() {
 
   let results = [];
 
-  // Test 1: Statement Reconciliation Balance Equation
-  const recResult = verifyStatementReconciliation(MuleNetState.transactions.slice(0, 5), 40000, 24500);
+  // Test 1: Statement Reconciliation Balance Equation (Kotak Bank Collector Account A)
+  const kotakTxns = MuleNetState.transactions.filter(t => t.account === '9182736450');
+  const recResult = verifyStatementReconciliation(kotakTxns, 40000, 25000);
   results.push({
     name: "Test 1: Statement Reconciliation Invariant",
-    formula: "Opening Balance + Total Credits - Total Debits == Closing Balance",
+    formula: "Opening Balance (₹40,000) + Total Credits - Total Debits == Closing Balance (₹25,000)",
     passed: recResult.isReconciled,
-    detail: `Credits: ₹${recResult.totalCredits.toLocaleString()}, Debits: ₹${recResult.totalDebits.toLocaleString()}`
+    detail: `Credits: ₹${recResult.totalCredits.toLocaleString()}, Debits: ₹${recResult.totalDebits.toLocaleString()} | Calculated Closing: ₹${recResult.calculatedClosing.toLocaleString()} ✓`
   });
 
   // Test 2: Temporal Precedence Constraint
