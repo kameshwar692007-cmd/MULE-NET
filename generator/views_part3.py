@@ -596,7 +596,7 @@ MODALS_HTML = """
 </div>
 
 <!-- Floating Guided Demo Banner Controller -->
-<div id="guidedDemoBanner" class="hidden fixed bottom-4 left-72 right-6 z-40 bg-slate-900 text-white rounded-lg p-3 shadow-2xl border border-amber-500/50 flex flex-col md:flex-row items-center justify-between gap-3 animate-bounce-subtle">
+<div id="guidedDemoBanner" class="hidden fixed bottom-4 left-3 right-3 sm:left-6 sm:right-6 lg:left-72 lg:right-6 z-40 bg-slate-900 text-white rounded-lg p-3 shadow-2xl border border-amber-500/50 flex flex-col sm:flex-row items-center justify-between gap-3 animate-bounce-subtle">
   <div class="flex items-center gap-2">
     <span class="w-8 h-8 rounded-full bg-amber-500 text-slate-900 flex items-center justify-center font-bold font-mono text-[13px] shrink-0" id="demoStepPill">1</span>
     <div>

@@ -709,39 +709,39 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
   <!-- Global Header -->
   
 <header class="fixed top-0 left-0 right-0 h-16 bg-surface-container-lowest border-b border-outline-variant z-40 flex items-center justify-between px-2 sm:px-3 md:px-4">
-  <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+  <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
     <!-- Mobile Hamburger Toggle -->
-    <button onclick="toggleMobileSidebar()" class="lg:hidden p-1.5 rounded-md text-on-surface hover:bg-surface-container border border-outline-variant flex items-center justify-center focus:outline-none cursor-pointer" aria-label="Toggle Navigation">
+    <button onclick="toggleMobileSidebar()" class="lg:hidden p-1.5 rounded text-on-surface hover:bg-surface-container border border-outline-variant flex items-center justify-center focus:outline-none cursor-pointer" aria-label="Toggle Navigation">
       <span class="material-symbols-outlined text-[20px]">menu</span>
     </button>
-    <div class="flex items-center gap-2">
-      <div class="w-8 h-8 sm:w-9 sm:h-9 rounded bg-primary-container border border-outline-variant flex items-center justify-center text-amber-500 font-bold shadow-sm flex-shrink-0">
-        <span class="material-symbols-outlined text-[20px] sm:text-[22px]">shield</span>
+    <div class="flex items-center gap-1.5 sm:gap-2">
+      <div class="w-8 h-8 rounded bg-primary-container border border-outline-variant flex items-center justify-center text-amber-500 font-bold shadow-sm flex-shrink-0">
+        <span class="material-symbols-outlined text-[20px]">shield</span>
       </div>
-      <div class="flex flex-col border-l border-outline-variant pl-2">
-        <div class="flex items-center gap-1 sm:gap-1.5">
+      <div class="flex flex-col border-l border-outline-variant pl-1.5 sm:pl-2">
+        <div class="flex items-center gap-1">
           <span class="font-headline-sm text-[13px] sm:text-[15px] font-bold tracking-tight text-on-surface">MULENET</span>
-          <span class="px-1.5 py-0.2 bg-surface-container text-secondary text-[9px] sm:text-[10px] font-label-code-sm font-bold rounded">POLICE INTEL v4.2</span>
+          <span class="hidden sm:inline px-1.5 py-0.2 bg-surface-container text-secondary text-[9px] font-label-code-sm font-bold rounded">POLICE INTEL v4.2</span>
         </div>
-        <span class="font-label-caps text-[8px] sm:text-[9px] text-on-surface-variant uppercase tracking-wider hidden sm:inline">STATE CYBER POLICE HQ, JAIPUR</span>
+        <span class="font-label-caps text-[8px] sm:text-[9px] text-on-surface-variant uppercase tracking-wider hidden md:inline">STATE CYBER POLICE HQ, JAIPUR</span>
       </div>
     </div>
   </div>
 
-  <!-- Global Search Bar -->
-  <div class="flex-1 max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg mx-2 sm:mx-3 min-w-0">
+  <!-- Global Search Bar (Responsive) -->
+  <div class="hidden sm:block flex-1 max-w-xs md:max-w-md lg:max-w-lg mx-2 md:mx-3 min-w-0">
     <div class="relative flex items-center w-full">
-      <span class="material-symbols-outlined absolute left-2.5 text-on-surface-variant text-[16px] sm:text-[18px]">search</span>
-      <input id="globalSearchInput" onkeyup="handleGlobalSearch(event)" class="w-full h-8 pl-8 sm:pl-9 pr-6 sm:pr-8 bg-surface-container-low border border-outline-variant rounded font-label-code-sm text-[11px] sm:text-[12px] text-on-surface focus:outline-none focus:border-secondary focus:bg-surface-container-lowest placeholder:text-outline truncate" placeholder="Global Search: UTR / Account..." type="text"/>
-      <span class="absolute right-2 text-[10px] text-outline font-label-code-sm border border-outline-variant px-1 rounded hidden sm:inline">↵</span>
+      <span class="material-symbols-outlined absolute left-2.5 text-on-surface-variant text-[16px]">search</span>
+      <input id="globalSearchInput" onkeyup="handleGlobalSearch(event)" class="w-full h-8 pl-8 pr-6 bg-surface-container-low border border-outline-variant rounded font-label-code-sm text-[11px] sm:text-[12px] text-on-surface focus:outline-none focus:border-secondary focus:bg-surface-container-lowest placeholder:text-outline truncate" placeholder="Search: UTR / Account / IFSC / Domain..." type="text"/>
+      <span class="absolute right-2 text-[10px] text-outline font-label-code-sm border border-outline-variant px-1 rounded hidden md:inline">↵</span>
     </div>
     <!-- Search Results Dropdown -->
     <div id="globalSearchResults" class="hidden absolute top-12 max-w-lg w-full bg-surface-container-lowest border border-outline-variant rounded shadow-lg z-50 p-2 space-y-1"></div>
   </div>
 
-  <!-- Case Quick Switcher & Officer Profile -->
-  <div class="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-    <!-- Active Case Selector -->
+  <!-- Case Quick Switcher & Action Controls -->
+  <div class="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+    <!-- Active Case Selector (Desktop Only) -->
     <div class="hidden xl:flex items-center gap-1.5 px-2 py-1 bg-surface-container border border-outline-variant rounded">
       <span class="w-2 h-2 rounded-full bg-error animate-pulse"></span>
       <div class="flex flex-col">
@@ -757,21 +757,21 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     </div>
 
     <!-- Guided Demo Tour Button -->
-    <button onclick="startGuidedDemo()" class="flex items-center gap-1 px-2 sm:px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded font-label-caps text-[10px] sm:text-[11px] font-bold tracking-wider shadow-sm transition-all" title="Guided Tour">
+    <button onclick="startGuidedDemo()" class="flex items-center gap-1 px-2 py-1 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded font-label-caps text-[10px] font-bold tracking-wider shadow-sm transition-all" title="Launch Interactive Tour">
       <span class="material-symbols-outlined text-[15px]">play_circle</span>
       <span class="hidden md:inline">GUIDED DEMO</span>
     </button>
 
     <!-- Automated Self Tests Button -->
-    <button onclick="openSelfTestsModal()" class="flex items-center gap-1 px-2 py-1 bg-surface-container hover:bg-surface-container-high border border-outline-variant text-on-surface rounded font-label-caps text-[10px] font-semibold tracking-wider transition-colors" title="Self-Tests">
+    <button onclick="openSelfTestsModal()" class="flex items-center gap-1 px-2 py-1 bg-surface-container hover:bg-surface-container-high border border-outline-variant text-on-surface rounded font-label-caps text-[10px] font-semibold tracking-wider transition-colors" title="Automated Forensic Tests">
       <span class="material-symbols-outlined text-[14px] text-secondary">verified</span>
-      <span class="hidden md:inline">SELF-TESTS</span>
+      <span class="hidden lg:inline">SELF-TESTS</span>
     </button>
 
     <!-- Evaluator / User Manual Button -->
-    <button onclick="openEvaluatorManual()" class="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-label-caps text-[10px] font-bold tracking-wider transition-colors shadow-sm" title="User Manual">
+    <button onclick="openEvaluatorManual()" class="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-label-caps text-[10px] font-bold tracking-wider transition-colors shadow-sm" title="Open Forensic User Manual">
       <span class="material-symbols-outlined text-[14px]">menu_book</span>
-      <span class="hidden sm:inline">USER MANUAL</span>
+      <span class="hidden md:inline">USER MANUAL</span>
     </button>
 
     <!-- Officer Badge -->
@@ -784,7 +784,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     </div>
 
     <!-- Sec 65B Hash Seal -->
-    <div class="hidden sm:flex items-center gap-1 px-1.5 py-1 rounded bg-surface-container font-label-code-sm text-[10px] text-on-surface-variant border border-outline-variant" title="Cryptographic SHA-256 Chain Active">
+    <div class="hidden lg:flex items-center gap-1 px-1.5 py-1 rounded bg-surface-container font-label-code-sm text-[10px] text-on-surface-variant border border-outline-variant" title="Cryptographic SHA-256 Chain Active">
       <span class="material-symbols-outlined text-[13px] text-secondary">lock</span>
       <span>SHA-256</span>
     </div>
@@ -2336,7 +2336,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 </div>
 
 <!-- Floating Guided Demo Banner Controller -->
-<div id="guidedDemoBanner" class="hidden fixed bottom-4 left-72 right-6 z-40 bg-slate-900 text-white rounded-lg p-3 shadow-2xl border border-amber-500/50 flex flex-col md:flex-row items-center justify-between gap-3 animate-bounce-subtle">
+<div id="guidedDemoBanner" class="hidden fixed bottom-4 left-3 right-3 sm:left-6 sm:right-6 lg:left-72 lg:right-6 z-40 bg-slate-900 text-white rounded-lg p-3 shadow-2xl border border-amber-500/50 flex flex-col sm:flex-row items-center justify-between gap-3 animate-bounce-subtle">
   <div class="flex items-center gap-2">
     <span class="w-8 h-8 rounded-full bg-amber-500 text-slate-900 flex items-center justify-center font-bold font-mono text-[13px] shrink-0" id="demoStepPill">1</span>
     <div>
