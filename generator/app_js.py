@@ -1929,6 +1929,16 @@ function closeSelfTestsModal() {
   document.getElementById('selfTestsModal').classList.add('hidden');
 }
 
+function openEvaluatorManual() {
+  const modal = document.getElementById('evaluatorManualModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeEvaluatorManual() {
+  const modal = document.getElementById('evaluatorManualModal');
+  if (modal) modal.classList.add('hidden');
+}
+
 // -------------------------------------------------------------
 // GUIDED HACKATHON DEMO WALKTHROUGH (11 Steps)
 // -------------------------------------------------------------

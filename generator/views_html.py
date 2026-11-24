@@ -58,6 +58,12 @@ HEADER_HTML = """
       <span>SELF-TESTS</span>
     </button>
 
+    <!-- Evaluator / User Manual Button -->
+    <button onclick="openEvaluatorManual()" class="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-label-caps text-[10px] font-bold tracking-wider transition-colors shadow-sm">
+      <span class="material-symbols-outlined text-[14px]">menu_book</span>
+      <span>USER MANUAL</span>
+    </button>
+
     <!-- Officer Badge -->
     <div class="hidden md:flex items-center gap-1.5 px-2 py-1 bg-surface-container-low rounded border border-outline-variant">
       <span class="material-symbols-outlined text-[16px] text-secondary">badge</span>
