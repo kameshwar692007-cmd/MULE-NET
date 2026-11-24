@@ -306,8 +306,32 @@ function loadInitialData() {
   ];
 }
 
+// Mobile Sidebar Toggle
+function toggleMobileSidebar() {
+  const sidebar = document.getElementById('mainSidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (sidebar) {
+    sidebar.classList.toggle('-translate-x-full');
+  }
+  if (backdrop) {
+    backdrop.classList.toggle('hidden');
+  }
+}
+
 // Navigation Handler
 function navigateTo(viewId) {
+  // Auto-close mobile sidebar if open
+  if (window.innerWidth < 1024) {
+    const sidebar = document.getElementById('mainSidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (sidebar && !sidebar.classList.contains('-translate-x-full')) {
+      sidebar.classList.add('-translate-x-full');
+    }
+    if (backdrop && !backdrop.classList.contains('hidden')) {
+      backdrop.classList.add('hidden');
+    }
+  }
+
   document.querySelectorAll('.view-panel').forEach(function(el) {
     el.classList.add('hidden');
   });

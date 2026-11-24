@@ -162,7 +162,7 @@ def build_index_html():
   {SIDEBAR_HTML}
 
   <!-- Main Operational Canvas -->
-  <div class="pl-64">
+  <div class="pl-0 lg:pl-64 transition-all">
     <main class="w-full pt-16 min-h-screen px-3 md:px-4 py-3 bg-surface">
       <!-- 15 Views -->
       {VIEW_OVERVIEW}
