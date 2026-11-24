@@ -1,0 +1,42 @@
+name: MuleNet Forensic Platform CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test-and-verify:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Rebuild Standalone Prototype
+      run: |
+        python generator/build.py
+
+    - name: Verify Single-file HTML Integrity
+      run: |
+        test -f index.html
+        echo "index.html size: $(wc -c < index.html) bytes"
+
+    - name: Execute Automated Acceptance Tests
+      run: |
+        node test_acceptance.js
+
+    - name: Execute Comprehensive Forensic Analytical Tests
+      run: |
+        node test_comprehensive_audit.js

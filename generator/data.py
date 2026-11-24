@@ -16,7 +16,7 @@ DATASET = {
             "firNo": "FIR No. 104/2024",
             "title": "Trading Investment Syndicate - Telegram Ponzi",
             "policeStation": "Cyber Police Station, Jaipur South",
-            "sections": "Sec 66D IT Act • Sec 318(4), 319(2), 61(2) BNS",
+            "sections": "Sec 66D IT Act \u2022 Sec 318(4), 319(2), 61(2) BNS",
             "status": "ACTIVE_INVESTIGATION",
             "assignedOfficer": "Insp. Rajesh K. Shekhawat (RJ-CY-8402)",
             "createdDate": "2024-10-18 09:42 IST",
@@ -27,7 +27,7 @@ DATASET = {
             "victimFraudAmount": 100000,
             "complaintRef": "NCRP-RJ-9821-2024",
             "evidenceHash": "8f4a7c1b3e9a2d5f0e1c3b4a5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
-            "notes": "Victim defrauded of ₹1,00,000 lured by fictitious stock trading scheme hosted on secure-invest-rajasthan.xyz and operated via Telegram channels. Funds transferred to Kotak collector account.",
+            "notes": "Victim defrauded of \u20b91,00,000 lured by fictitious stock trading scheme hosted on secure-invest-rajasthan.xyz and operated via Telegram channels. Funds transferred to Kotak collector account.",
             "targetAccount": "9182736450"
         },
         {
@@ -35,7 +35,7 @@ DATASET = {
             "firNo": "FIR No. 072/2024",
             "title": "Job Portal Work-from-Home Phishing Syndicate",
             "policeStation": "Cyber Police Station, Jodhpur City",
-            "sections": "Sec 66C, 66D IT Act • Sec 318(4) BNS",
+            "sections": "Sec 66C, 66D IT Act \u2022 Sec 318(4) BNS",
             "status": "ACTIVE_INVESTIGATION",
             "assignedOfficer": "SI Vikramaditya Rathore (RJ-CY-9104)",
             "createdDate": "2024-10-12 14:15 IST",
@@ -54,7 +54,7 @@ DATASET = {
             "firNo": "FIR No. 119/2024",
             "title": "Instant Loan App Extortion & Harassment Network",
             "policeStation": "Cyber Police Station, Kota City",
-            "sections": "Sec 66E, 67 IT Act • Sec 308(2), 351(2) BNS",
+            "sections": "Sec 66E, 67 IT Act \u2022 Sec 308(2), 351(2) BNS",
             "status": "UNDER_REVIEW",
             "assignedOfficer": "DySP Sunita Choudhary (RJ-CY-7215)",
             "createdDate": "2024-10-15 11:20 IST",
@@ -312,7 +312,7 @@ DATASET = {
             "sourceFile": "kotak_account_A_statement.csv",
             "row": 4,
             "flag": "LAYER_1_SPLIT_OUTFLOW",
-            "note": "Rapid outbound transfer (32 mins dwell time). Round figure ₹70,000."
+            "note": "Rapid outbound transfer (32 mins dwell time). Round figure \u20b970,000."
         },
         {
             "id": "TXN-004",
@@ -360,7 +360,7 @@ DATASET = {
             "sourceFile": "kotak_account_A_statement.csv",
             "row": 5,
             "flag": "LAYER_1_SPLIT_OUTFLOW",
-            "note": "Second branch of splitting. Retains ₹10,000 residual in Account A."
+            "note": "Second branch of splitting. Retains \u20b910,000 residual in Account A."
         },
         {
             "id": "TXN-006",
@@ -408,7 +408,7 @@ DATASET = {
             "sourceFile": "icici_account_B_statement.csv",
             "row": 3,
             "flag": "LAYER_2_SPLIT_OUTFLOW",
-            "note": "Transfers ₹50,000 to Account D (Suresh Traders)."
+            "note": "Transfers \u20b950,000 to Account D (Suresh Traders)."
         },
         {
             "id": "TXN-008",
@@ -432,7 +432,7 @@ DATASET = {
             "sourceFile": "axis_synthetic_ledger.csv",
             "row": 2,
             "flag": "LAYER_3_TERMINAL_RESIDUAL",
-            "note": "Funds PARKED! Residual exposure ₹50,000. Immediate freeze target!"
+            "note": "Funds PARKED! Residual exposure \u20b950,000. Immediate freeze target!"
         },
         {
             "id": "TXN-009",
@@ -456,7 +456,7 @@ DATASET = {
             "sourceFile": "icici_account_B_statement.csv",
             "row": 4,
             "flag": "LAYER_2_SPLIT_OUTFLOW",
-            "note": "Account B retains ₹5,000 residual. ₹15,000 routed to Account E."
+            "note": "Account B retains \u20b95,000 residual. \u20b915,000 routed to Account E."
         },
         {
             "id": "TXN-010",
@@ -480,7 +480,7 @@ DATASET = {
             "sourceFile": "hdfc_synthetic_ledger.csv",
             "row": 2,
             "flag": "LAYER_3_TERMINAL_RESIDUAL",
-            "note": "Funds PARKED! Residual exposure ₹15,000. Shared with FIR 119/2024."
+            "note": "Funds PARKED! Residual exposure \u20b915,000. Shared with FIR 119/2024."
         },
         {
             "id": "TXN-011",
@@ -504,7 +504,7 @@ DATASET = {
             "sourceFile": "sbi_account_C_statement_inconsistent.csv",
             "row": 3,
             "flag": "LAYER_2_SPLIT_OUTFLOW",
-            "note": "Account C retains ₹5,000 residual. ₹15,000 routed to Account F."
+            "note": "Account C retains \u20b95,000 residual. \u20b915,000 routed to Account F."
         },
         {
             "id": "TXN-012",
@@ -528,7 +528,7 @@ DATASET = {
             "sourceFile": "yes_synthetic_ledger.csv",
             "row": 2,
             "flag": "LAYER_3_TERMINAL_RESIDUAL",
-            "note": "Funds PARKED! Residual exposure ₹15,000."
+            "note": "Funds PARKED! Residual exposure \u20b915,000."
         },
         {
             "id": "TXN-013",
@@ -553,6 +553,126 @@ DATASET = {
             "row": 4,
             "flag": "RECONCILIATION_EXCEPTION",
             "note": "Deliberate synthetic discrepancy! Balance jumped from 15,000 to 35,000 without credit."
+        },
+        {
+            "id": "TXN-JD-001",
+            "caseId": "FIR-072-2024",
+            "date": "2024-10-12",
+            "time": "14:15:00",
+            "timestamp": "2024-10-12T14:15:00+05:30",
+            "bank": "Axis Bank",
+            "account": "1192837465",
+            "holder": "Suresh Traders",
+            "direction": "CREDIT",
+            "debit": 0,
+            "credit": 350000,
+            "amount": 350000,
+            "balance": 350000,
+            "counterpartyAccount": "30918274619",
+            "counterpartyName": "Ananya Dave (Victim)",
+            "utr": "UTR-2024-JD-110293",
+            "narration": "IMPS/P2A/110293/Ananya Dave/Job Deposit",
+            "channel": "IMPS",
+            "sourceFile": "axis_synthetic_ledger.csv",
+            "row": 1,
+            "flag": "VICTIM_PRIMARY_INFLOW",
+            "note": "Victim deposit for job phishing syndicate."
+        },
+        {
+            "id": "TXN-JD-002",
+            "caseId": "FIR-072-2024",
+            "date": "2024-10-12",
+            "time": "15:00:00",
+            "timestamp": "2024-10-12T15:00:00+05:30",
+            "bank": "Axis Bank",
+            "account": "1192837465",
+            "holder": "Suresh Traders",
+            "direction": "DEBIT",
+            "debit": 200000,
+            "credit": 0,
+            "amount": 200000,
+            "balance": 150000,
+            "counterpartyAccount": "7738291045",
+            "counterpartyName": "Royal Enterprises",
+            "utr": "UTR-2024-JD-110294",
+            "narration": "RTGS/AXISR110294/Royal Ent/Layering 1",
+            "channel": "RTGS",
+            "sourceFile": "axis_synthetic_ledger.csv",
+            "row": 2,
+            "flag": "LAYER_1_SPLIT_OUTFLOW",
+            "note": "Transfers \u20b92,00,000 to Royal Enterprises."
+        },
+        {
+            "id": "TXN-JD-003",
+            "caseId": "FIR-072-2024",
+            "date": "2024-10-12",
+            "time": "15:30:00",
+            "timestamp": "2024-10-12T15:30:00+05:30",
+            "bank": "Axis Bank",
+            "account": "1192837465",
+            "holder": "Suresh Traders",
+            "direction": "DEBIT",
+            "debit": 100000,
+            "credit": 0,
+            "amount": 100000,
+            "balance": 50000,
+            "counterpartyAccount": "3391827461",
+            "counterpartyName": "Kailash Agro Feeds",
+            "utr": "UTR-2024-JD-110295",
+            "narration": "NEFT/AXISN110295/Kailash Agro/Layering 2",
+            "channel": "NEFT",
+            "sourceFile": "axis_synthetic_ledger.csv",
+            "row": 3,
+            "flag": "LAYER_1_SPLIT_OUTFLOW",
+            "note": "Transfers \u20b91,00,000 to Kailash Agro. Suresh Traders retains \u20b950,000 residual."
+        },
+        {
+            "id": "TXN-KT-001",
+            "caseId": "FIR-119-2024",
+            "date": "2024-10-15",
+            "time": "11:20:00",
+            "timestamp": "2024-10-15T11:20:00+05:30",
+            "bank": "HDFC Bank",
+            "account": "8829103948",
+            "holder": "Vikash Cloud Solutions LLP",
+            "direction": "CREDIT",
+            "debit": 0,
+            "credit": 85000,
+            "amount": 85000,
+            "balance": 85000,
+            "counterpartyAccount": "60291837461",
+            "counterpartyName": "Prakash Meena (Victim)",
+            "utr": "UTR-2024-KT-449102",
+            "narration": "UPI/449102/Prakash Meena/Loan Extortion",
+            "channel": "UPI",
+            "sourceFile": "hdfc_synthetic_ledger.csv",
+            "row": 1,
+            "flag": "VICTIM_PRIMARY_INFLOW",
+            "note": "Victim deposit for loan extortion network."
+        },
+        {
+            "id": "TXN-KT-002",
+            "caseId": "FIR-119-2024",
+            "date": "2024-10-15",
+            "time": "12:10:00",
+            "timestamp": "2024-10-15T12:10:00+05:30",
+            "bank": "HDFC Bank",
+            "account": "8829103948",
+            "holder": "Vikash Cloud Solutions LLP",
+            "direction": "DEBIT",
+            "debit": 60000,
+            "credit": 0,
+            "amount": 60000,
+            "balance": 25000,
+            "counterpartyAccount": "2281920394",
+            "counterpartyName": "Dinesh Fast Food",
+            "utr": "UTR-2024-KT-449103",
+            "narration": "IMPS/HDFC449103/Dinesh Fast Food/Dispersal",
+            "channel": "IMPS",
+            "sourceFile": "hdfc_synthetic_ledger.csv",
+            "row": 2,
+            "flag": "LAYER_1_SPLIT_OUTFLOW",
+            "note": "Transfers \u20b960,000 to Dinesh Fast Food. Vikash Cloud retains \u20b925,000 residual."
         }
     ],
     "infrastructure": [
@@ -571,11 +691,22 @@ DATASET = {
             "sslValidUntil": "2024-12-27",
             "vpnTorIndicator": "HIGH RISK: Tor Exit Node / Bulletproof Host",
             "dnsRecords": {
-                "A": ["185.220.101.45"],
-                "NS": ["dns1.namecheaphosting.com", "dns2.namecheaphosting.com"],
-                "MX": ["mail.secure-invest-rajasthan.xyz"]
+                "A": [
+                    "185.220.101.45"
+                ],
+                "NS": [
+                    "dns1.namecheaphosting.com",
+                    "dns2.namecheaphosting.com"
+                ],
+                "MX": [
+                    "mail.secure-invest-rajasthan.xyz"
+                ]
             },
-            "subdomains": ["app.secure-invest-rajasthan.xyz", "trade.secure-invest-rajasthan.xyz", "api.secure-invest-rajasthan.xyz"],
+            "subdomains": [
+                "app.secure-invest-rajasthan.xyz",
+                "trade.secure-invest-rajasthan.xyz",
+                "api.secure-invest-rajasthan.xyz"
+            ],
             "linkedCase": "FIR-104-2024",
             "linkedAccount": "9182736450",
             "source": "Passive DNS & WHOIS Cached Fixture"
@@ -595,11 +726,20 @@ DATASET = {
             "sslValidUntil": "2025-01-02",
             "vpnTorIndicator": "MEDIUM RISK: Cloudflare Origin Obfuscation",
             "dnsRecords": {
-                "A": ["104.21.48.192", "172.67.182.204"],
-                "NS": ["dora.ns.cloudflare.com", "trey.ns.cloudflare.com"],
+                "A": [
+                    "104.21.48.192",
+                    "172.67.182.204"
+                ],
+                "NS": [
+                    "dora.ns.cloudflare.com",
+                    "trey.ns.cloudflare.com"
+                ],
                 "MX": []
             },
-            "subdomains": ["admin.kyc-verify-portal.net", "upload.kyc-verify-portal.net"],
+            "subdomains": [
+                "admin.kyc-verify-portal.net",
+                "upload.kyc-verify-portal.net"
+            ],
             "linkedCase": "FIR-104-2024 & FIR-072-2024 (Cross-Case Link)",
             "linkedAccount": "1192837465",
             "source": "Passive DNS & RDAP Record"
@@ -619,11 +759,18 @@ DATASET = {
             "sslValidUntil": "2024-12-14",
             "vpnTorIndicator": "HIGH RISK: Tor Node / Shared Fraud IP",
             "dnsRecords": {
-                "A": ["185.220.101.45"],
-                "NS": ["ns1.domaincontrol.com", "ns2.domaincontrol.com"],
+                "A": [
+                    "185.220.101.45"
+                ],
+                "NS": [
+                    "ns1.domaincontrol.com",
+                    "ns2.domaincontrol.com"
+                ],
                 "MX": []
             },
-            "subdomains": ["pay.quick-loan-bharat.in"],
+            "subdomains": [
+                "pay.quick-loan-bharat.in"
+            ],
             "linkedCase": "FIR-119-2024",
             "linkedAccount": "8829103948",
             "source": "Passive DNS Record"
